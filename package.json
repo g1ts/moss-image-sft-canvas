@@ -1,0 +1,49 @@
+{
+  "name": "moss-image-sft-canvas",
+  "version": "1.0.0",
+  "description": "Visual bounding-box layout editor that produces JSON for MOSS-Image-SFT layout-to-image generation, with optional in-app image generation via a stable-diffusion.cpp server",
+  "type": "module",
+  "license": "MIT",
+  "author": "g1ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/g1ts/moss-image-sft-canvas.git"
+  },
+  "homepage": "https://g1ts.github.io/moss-image-sft-canvas/",
+  "bugs": {
+    "url": "https://github.com/g1ts/moss-image-sft-canvas/issues"
+  },
+  "keywords": [
+    "moss-image",
+    "moss-image-sft",
+    "layout",
+    "layout-to-image",
+    "bounding-box",
+    "image-generation",
+    "stable-diffusion",
+    "stable-diffusion.cpp",
+    "sdcpp",
+    "react",
+    "canvas"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0"
+  }
+}

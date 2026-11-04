@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.playwright-mcp/
+*.tsbuildinfo
+.DS_Store
+/stage-initial.png
+/bb-canvas-final.png
