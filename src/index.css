@@ -172,11 +172,47 @@ textarea:focus { outline: none; border-color: var(--accent); }
 #sumNegPrompt { height: 100px; }
 .row input[type=number] { flex: 1; min-width: 0; }
 label.fl { font-size: 12px; color: var(--muted); flex-shrink: 0; }
-.gen-adv { margin-top: 8px; font-size: 12px; }
-.gen-adv summary { cursor: pointer; color: var(--muted); user-select: none; }
-.gen-adv[open] summary { margin-bottom: 6px; }
-.lora-block { margin-top: 8px; }
+.gen-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px 12px;
+}
+.gen-switch-cell {
+  display: flex; align-items: flex-end; gap: 8px;
+  min-width: 0;
+}
+.gen-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.gen-field label { font-size: 11px; color: var(--muted); }
+.gen-switch-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.gen-adv summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.gen-adv summary:hover { color: var(--text); }
+.gen-adv summary::-webkit-details-marker { display: none; }
+.gen-adv summary::after {
+  content: "";
+  width: 7px; height: 7px; flex-shrink: 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg) translateY(-1px);
+  transition: transform .15s ease;
+}
+.gen-adv[open] summary::after { transform: rotate(45deg) translateY(-1px); }
+.lora-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lora-head h2 { margin-bottom: 0; }
+.lora-idx {
+  font-size: 11px; color: var(--muted);
+  width: 14px; text-align: right; flex-shrink: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.lora-block { display: flex; flex-direction: column; }
+.lora-empty { font-size: 12px; color: var(--muted); }
+.gen-foot-hint { margin-top: 0; }
 .lora-row input[type=number] { flex: 0 0 64px; width: 64px; }
+input:disabled { opacity: .55; cursor: default; }
 .lora-del {
   display: inline-flex; align-items: center; justify-content: center;
   background: none; border: none; color: var(--muted);

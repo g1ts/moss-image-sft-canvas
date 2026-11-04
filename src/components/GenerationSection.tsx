@@ -42,209 +42,244 @@ export default function GenerationSection({ open }: { open: boolean }) {
   }, [open, loadCatalog]);
 
   return (
-    <div className="section">
-      <h2>Generation (sdcpp)</h2>
-      <div className="row">
-        <input
-          type="text"
-          id="genUrl"
-          value={genUrl}
-          spellCheck={false}
-          title="sdcpp server URL"
-          onChange={e => setGenParam({ genUrl: e.target.value })}
-          onBlur={() => {
-            saveGenUrl();
-            loadCatalog();
-          }}
-        />
-      </div>
-      <div className="row">
-        <label className="f" htmlFor="genW">W</label>
-        <input
-          type="number"
-          id="genW"
-          value={genFromCanvas ? cw : genW}
-          min={64}
-          max={4096}
-          disabled={genFromCanvas}
-          onChange={e => setGenParam({ genW: e.target.value })}
-        />
-        <label className="f" htmlFor="genH">H</label>
-        <input
-          type="number"
-          id="genH"
-          value={genFromCanvas ? ch : genH}
-          min={64}
-          max={4096}
-          disabled={genFromCanvas}
-          onChange={e => setGenParam({ genH: e.target.value })}
-        />
-        <label className="chk" title="Take size from the canvas">
+    <>
+      <div className="cs-section">
+        <div className="gen-field">
+          <label htmlFor="genUrl">Server</label>
           <input
-            type="checkbox"
-            id="genFromCanvas"
-            checked={genFromCanvas}
-            onChange={e => setGenParam({ genFromCanvas: e.target.checked })}
-          />
-          from canvas
-        </label>
-      </div>
-      <div className="row">
-        <label className="f" htmlFor="genCount">N</label>
-        <input
-          type="number"
-          id="genCount"
-          value={genCount}
-          min={1}
-          max={4}
-          onChange={e => setGenParam({ genCount: e.target.value })}
-        />
-        <label className="f" htmlFor="genSteps">S</label>
-        <input
-          type="number"
-          id="genSteps"
-          value={genSteps}
-          min={1}
-          max={500}
-          onChange={e => setGenParam({ genSteps: e.target.value })}
-        />
-        <label className="f" htmlFor="genCfg">C</label>
-        <input
-          type="number"
-          id="genCfg"
-          value={genCfg}
-          min={0.1}
-          max={30}
-          step={0.1}
-          onChange={e => setGenParam({ genCfg: e.target.value })}
-        />
-      </div>
-      <div className="row">
-        <label
-          className="chk"
-          htmlFor="genAutoBg"
-          title="After generation, automatically set the last image as the canvas background"
-        >
-          <input
-            type="checkbox"
-            id="genAutoBg"
-            checked={genAutoBg}
-            onChange={e => setGenAutoBg(e.target.checked)}
-          />
-          auto background after generation
-        </label>
-      </div>
-      <div className="row">
-        <label className="fl" htmlFor="genSeed">seed</label>
-        <input
-          type="number"
-          id="genSeed"
-          value={genSeed}
-          title="-1 = random"
-          onChange={e => setGenParam({ genSeed: e.target.value })}
-        />
-      </div>
-      <details className="gen-adv">
-        <summary>Advanced</summary>
-        <div className="row">
-          <label className="fl">clip_skip</label>
-          <input
-            type="number"
-            id="genClip"
-            value={genClip}
-            min={1}
-            max={12}
-            onChange={e => setGenParam({ genClip: e.target.value })}
+            type="text"
+            id="genUrl"
+            value={genUrl}
+            spellCheck={false}
+            title="sdcpp server URL"
+            onChange={e => setGenParam({ genUrl: e.target.value })}
+            onBlur={() => {
+              saveGenUrl();
+              loadCatalog();
+            }}
           />
         </div>
-        <div className="row">
-          <label className="fl" htmlFor="genSched">scheduler</label>
-          <select
-            id="genSched"
-            value={genSched}
-            title="List is loaded from the server: /sdapi/v1/schedulers"
-            onChange={e => setGenParam({ genSched: e.target.value })}
+        <div className="gen-switch-row">
+          <span className="switch-label">auto background after generation</span>
+          <label
+            className="switch"
+            title="After generation, automatically set the last image as the canvas background"
           >
-            {optionsWithCurrent(schedOptions, genSched).map(v => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+            <input
+              type="checkbox"
+              id="genAutoBg"
+              checked={genAutoBg}
+              onChange={e => setGenAutoBg(e.target.checked)}
+            />
+            <span className="switch-track" aria-hidden="true" />
+          </label>
         </div>
-        <div className="row">
-          <label className="fl" htmlFor="genMethod">method</label>
-          <select
-            id="genMethod"
-            value={genMethod}
-            title="List is loaded from the server: /sdapi/v1/samplers"
-            onChange={e => setGenParam({ genMethod: e.target.value })}
-          >
-            {optionsWithCurrent(samplerOptions, genMethod).map(v => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
-        {catalogLoading && <p className="cs-hint">loading lists from the server...</p>}
-        {catalogError && !catalogLoading && (
-          <p className="cs-hint" id="catalogError">
-            lists: {catalogError}
-          </p>
-        )}
-        <div className="lora-block">
-          {genLoras.map((row, i) => (
-            <div className="row lora-row" key={row.id}>
-              <label className="fl">lora {i + 1}</label>
-              <select
-                className="lora-sel"
-                value={row.path}
-                title="List is loaded from the server: /sdapi/v1/loras"
-                onChange={e => updateLoraRow(row.id, { path: e.target.value })}
-              >
-                <option value="">—</option>
-                {loraOptions.map(o => (
-                  <option key={o.path} value={o.path}>
-                    {o.name}
-                  </option>
-                ))}
-                {row.path &&
-                  !loraOptions.some(o => o.path === row.path) && (
-                    <option value={row.path}>{row.path}</option>
-                  )}
-              </select>
+      </div>
+      <div className="cs-section">
+        <h2>Size</h2>
+        <div className="gen-grid">
+          <div className="gen-field">
+            <label htmlFor="genW">Width</label>
+            <input
+              type="number"
+              id="genW"
+              value={genFromCanvas ? cw : genW}
+              min={64}
+              max={4096}
+              disabled={genFromCanvas}
+              onChange={e => setGenParam({ genW: e.target.value })}
+            />
+          </div>
+          <div className="gen-field">
+            <label htmlFor="genH">Height</label>
+            <input
+              type="number"
+              id="genH"
+              value={genFromCanvas ? ch : genH}
+              min={64}
+              max={4096}
+              disabled={genFromCanvas}
+              onChange={e => setGenParam({ genH: e.target.value })}
+            />
+          </div>
+          <div className="gen-switch-cell">
+            <span className="switch-label">from canvas</span>
+            <label className="switch" title="Take size from the canvas">
               <input
-                type="number"
-                className="lora-mult"
-                value={row.mult}
-                min={0}
-                max={2}
-                step={0.1}
-                title="strength (multiplier)"
-                onChange={e => updateLoraRow(row.id, { mult: e.target.value })}
+                type="checkbox"
+                id="genFromCanvas"
+                checked={genFromCanvas}
+                onChange={e => setGenParam({ genFromCanvas: e.target.checked })}
               />
-              <button
-                type="button"
-                className="lora-del"
-                aria-label="Remove lora"
-                title="Remove"
-                onClick={() => removeLoraRow(row.id)}
-              >
-                <TrashIcon />
-              </button>
-            </div>
-          ))}
-          <div className="row">
-            <button type="button" className="lora-add" onClick={addLoraRow}>
-              + lora
-            </button>
+              <span className="switch-track" aria-hidden="true" />
+            </label>
           </div>
         </div>
-      </details>
-      <p className="cs-hint">
-        Start generation with the "Generate" button in the top bar or Ctrl+Enter; while running, a "Cancel" button appears
-      </p>
-    </div>
+      </div>
+      <div className="cs-section">
+        <h2>Sampling</h2>
+        <div className="gen-grid">
+          <div className="gen-field">
+            <label htmlFor="genCount">Images</label>
+            <input
+              type="number"
+              id="genCount"
+              value={genCount}
+              min={1}
+              max={4}
+              onChange={e => setGenParam({ genCount: e.target.value })}
+            />
+          </div>
+          <div className="gen-field">
+            <label htmlFor="genSteps">Steps</label>
+            <input
+              type="number"
+              id="genSteps"
+              value={genSteps}
+              min={1}
+              max={500}
+              onChange={e => setGenParam({ genSteps: e.target.value })}
+            />
+          </div>
+          <div className="gen-field">
+            <label htmlFor="genCfg">CFG</label>
+            <input
+              type="number"
+              id="genCfg"
+              value={genCfg}
+              min={0.1}
+              max={30}
+              step={0.1}
+              onChange={e => setGenParam({ genCfg: e.target.value })}
+            />
+          </div>
+          <div className="gen-field">
+            <label htmlFor="genSeed">Seed</label>
+            <input
+              type="number"
+              id="genSeed"
+              value={genSeed}
+              title="-1 = random"
+              onChange={e => setGenParam({ genSeed: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="cs-section">
+        <details className="gen-adv">
+          <summary>Advanced</summary>
+          <div className="gen-grid">
+            <div className="gen-field">
+              <label htmlFor="genClip">Clip skip</label>
+              <input
+                type="number"
+                id="genClip"
+                value={genClip}
+                min={1}
+                max={12}
+                onChange={e => setGenParam({ genClip: e.target.value })}
+              />
+            </div>
+            <div className="gen-field">
+              <label htmlFor="genSched">Scheduler</label>
+              <select
+                id="genSched"
+                value={genSched}
+                title="List is loaded from the server: /sdapi/v1/schedulers"
+                onChange={e => setGenParam({ genSched: e.target.value })}
+              >
+                {optionsWithCurrent(schedOptions, genSched).map(v => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="gen-field">
+              <label htmlFor="genMethod">Method</label>
+              <select
+                id="genMethod"
+                value={genMethod}
+                title="List is loaded from the server: /sdapi/v1/samplers"
+                onChange={e => setGenParam({ genMethod: e.target.value })}
+              >
+                {optionsWithCurrent(samplerOptions, genMethod).map(v => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {catalogLoading && <p className="cs-hint">loading lists from the server...</p>}
+          {catalogError && !catalogLoading && (
+            <p className="cs-hint" id="catalogError">
+              lists: {catalogError}
+            </p>
+          )}
+        </details>
+      </div>
+      <div className="cs-section">
+        <div className="lora-head">
+          <h2>LoRAs</h2>
+          <button type="button" className="lora-add" onClick={addLoraRow}>
+            + Add
+          </button>
+        </div>
+        {genLoras.length === 0 ? (
+          <p className="lora-empty">No LoRAs</p>
+        ) : (
+          <div className="lora-block">
+            {genLoras.map((row, i) => (
+              <div className="row lora-row" key={row.id}>
+                <span className="lora-idx">{i + 1}</span>
+                <select
+                  className="lora-sel"
+                  value={row.path}
+                  title="List is loaded from the server: /sdapi/v1/loras"
+                  onChange={e => updateLoraRow(row.id, { path: e.target.value })}
+                >
+                  <option value="">—</option>
+                  {loraOptions.map(o => (
+                    <option key={o.path} value={o.path}>
+                      {o.name}
+                    </option>
+                  ))}
+                  {row.path &&
+                    !loraOptions.some(o => o.path === row.path) && (
+                      <option value={row.path}>{row.path}</option>
+                    )}
+                </select>
+                <input
+                  type="number"
+                  className="lora-mult"
+                  value={row.mult}
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  title="strength (multiplier)"
+                  onChange={e => updateLoraRow(row.id, { mult: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="lora-del"
+                  aria-label="Remove lora"
+                  title="Remove"
+                  onClick={() => removeLoraRow(row.id)}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="cs-section">
+        <p className="cs-hint gen-foot-hint">
+          Start generation with the "Generate" button in the top bar or Ctrl+Enter; while running,
+          a "Cancel" button appears
+        </p>
+      </div>
+    </>
   );
 }
