@@ -9,12 +9,14 @@ import StatusBar from "./components/StatusBar";
 import SettingsModal from "./components/SettingsModal";
 import CanvasSettingsModal from "./components/CanvasSettingsModal";
 import BoxModal from "./components/BoxModal";
+import ImagePreviewModal from "./components/ImagePreviewModal";
 import GearIcon from "./components/GearIcon";
 import { useStore } from "./store";
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false);
+  const [previewItemId, setPreviewItemId] = useState<number | null>(null);
   const pendingBoxId = useStore(s => s.pendingBoxId);
   const setPendingBoxId = useStore(s => s.setPendingBoxId);
   const genBusy = useStore(s => s.genBusy);
@@ -24,17 +26,19 @@ export default function App() {
   const cancelGeneration = useStore(s => s.cancelGeneration);
 
   useEffect(() => {
-    if (!settingsOpen && !canvasSettingsOpen && pendingBoxId === null) return;
+    if (!settingsOpen && !canvasSettingsOpen && pendingBoxId === null && previewItemId === null)
+      return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setSettingsOpen(false);
         setCanvasSettingsOpen(false);
         setPendingBoxId(null);
+        setPreviewItemId(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [settingsOpen, canvasSettingsOpen, pendingBoxId, setPendingBoxId]);
+  }, [settingsOpen, canvasSettingsOpen, pendingBoxId, previewItemId, setPendingBoxId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -98,7 +102,7 @@ export default function App() {
         )}
         <div id="centerCol">
           <CanvasStage onOpenSettings={() => setCanvasSettingsOpen(true)} />
-          <Gallery />
+          <Gallery onPreview={setPreviewItemId} />
         </div>
         <aside className="right">
           <SummarySection />
@@ -109,6 +113,11 @@ export default function App() {
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <CanvasSettingsModal open={canvasSettingsOpen} onClose={() => setCanvasSettingsOpen(false)} />
       <BoxModal boxId={pendingBoxId} onClose={() => setPendingBoxId(null)} />
+      <ImagePreviewModal
+        itemId={previewItemId}
+        onNavigate={setPreviewItemId}
+        onClose={() => setPreviewItemId(null)}
+      />
     </>
   );
 }

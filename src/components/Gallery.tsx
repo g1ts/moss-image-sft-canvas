@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../store";
+import SearchIcon from "./SearchIcon";
 
 function downloadItem(id: number, img: HTMLImageElement): void {
   const m = img.src.match(/^data:image\/([a-z0-9+.-]+)/i);
@@ -12,7 +13,7 @@ function downloadItem(id: number, img: HTMLImageElement): void {
   a.remove();
 }
 
-export default function Gallery() {
+export default function Gallery({ onPreview }: { onPreview: (id: number) => void }) {
   const gallery = useStore(s => s.gallery);
   const bgImage = useStore(s => s.bgImage);
   const useAsBg = useStore(s => s.useAsBg);
@@ -58,6 +59,16 @@ export default function Gallery() {
             }}
           >
             ⬇
+          </button>
+          <button
+            className="g-view"
+            title="View image with generation params"
+            onClick={e => {
+              e.stopPropagation();
+              onPreview(g.id);
+            }}
+          >
+            <SearchIcon />
           </button>
         </div>
       ))}

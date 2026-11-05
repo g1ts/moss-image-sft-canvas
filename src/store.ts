@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Box, GalleryItem, LayoutSummary } from "./types";
+import type { Box, GalleryItem, GenItemParams, LayoutSummary } from "./types";
 import { PALETTE, toLayoutText, type ParsedLayout } from "./lib/geometry";
 import {
   LABEL_HISTORY_KEY,
@@ -266,7 +266,7 @@ interface CanvasState extends GenParams {
   updateLoraRow: (id: number, patch: Partial<Omit<GenLoraRow, "id">>) => void;
   generate: () => Promise<void>;
   cancelGeneration: () => Promise<void>;
-  addGalleryItem: (img: HTMLImageElement, prompt: string) => void;
+  addGalleryItem: (img: HTMLImageElement, prompt: string, params: GenItemParams) => void;
   deleteGalleryItem: (id: number) => void;
   useAsBg: (id: number) => void;
 }
@@ -668,11 +668,27 @@ export const useStore = create<CanvasState>()((set, get) => ({
       const images = result.images || [];
       if (!images.length) throw new Error("the server did not return any images");
       const format = result.output_format || "png";
+      const params: GenItemParams = {
+        server: base,
+        negativePrompt: body.negative_prompt,
+        width: body.width,
+        height: body.height,
+        count: body.batch_count,
+        steps: body.sample_params.sample_steps,
+        cfg: body.sample_params.guidance.txt_cfg,
+        seed: typeof result.seed === "number" ? result.seed : body.seed,
+        clipSkip: body.clip_skip,
+        scheduler: body.sample_params.scheduler,
+        method: body.sample_params.sample_method,
+        loras: body.lora.map(l => ({ path: l.path, mult: l.multiplier })),
+        format,
+        createdAt: Date.now()
+      };
       let lastEl: HTMLImageElement | null = null;
       for (const img of images) {
         if (!img.b64_json) throw new Error("image without a b64_json field");
         const el = await loadImage("data:image/" + format + ";base64," + img.b64_json);
-        get().addGalleryItem(el, prompt);
+        get().addGalleryItem(el, prompt, params);
         lastEl = el;
       }
       if (lastEl && get().genAutoBg) {
@@ -723,9 +739,9 @@ export const useStore = create<CanvasState>()((set, get) => ({
     }
   },
 
-  addGalleryItem: (img, prompt) =>
+  addGalleryItem: (img, prompt, params) =>
     set(s => ({
-      gallery: [{ id: s.nextId, img, prompt }, ...s.gallery],
+      gallery: [{ id: s.nextId, img, prompt, params }, ...s.gallery],
       nextId: s.nextId + 1
     })),
 
