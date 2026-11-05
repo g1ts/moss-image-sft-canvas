@@ -18,6 +18,8 @@ export default function Gallery({ onPreview }: { onPreview: (id: number) => void
   const bgImage = useStore(s => s.bgImage);
   const useAsBg = useStore(s => s.useAsBg);
   const deleteItem = useStore(s => s.deleteGalleryItem);
+  const galleryHidden = useStore(s => s.galleryHidden);
+  const setGalleryHidden = useStore(s => s.setGalleryHidden);
   const listRef = useRef<HTMLDivElement>(null);
   const prevCount = useRef(gallery.length);
 
@@ -29,49 +31,62 @@ export default function Gallery({ onPreview }: { onPreview: (id: number) => void
   }, [gallery.length]);
 
   return (
-    <div id="gallery" ref={listRef}>
-      {gallery.map(g => (
-        <div
-          key={g.id}
-          className={"g-item" + (bgImage === g.img ? " active" : "")}
-          onClick={() => useAsBg(g.id)}
+    <div className="gallery-wrap">
+      {gallery.length > 0 && (
+        <button
+          className="gallery-tab"
+          title={galleryHidden ? "show gallery" : "hide gallery"}
+          onClick={() => setGalleryHidden(!galleryHidden)}
         >
-          <img src={g.img.src} alt="" />
-          <div className="g-cap">
-            {(g.prompt || "image") + "  " + g.img.naturalWidth + "×" + g.img.naturalHeight}
-          </div>
-          <button
-            className="g-del"
-            title="Remove from gallery"
-            onClick={e => {
-              e.stopPropagation();
-              deleteItem(g.id);
-            }}
-          >
-            ✕
-          </button>
-          <button
-            className="g-dl"
-            title="Download image"
-            onClick={e => {
-              e.stopPropagation();
-              downloadItem(g.id, g.img);
-            }}
-          >
-            ⬇
-          </button>
-          <button
-            className="g-view"
-            title="View image with generation params"
-            onClick={e => {
-              e.stopPropagation();
-              onPreview(g.id);
-            }}
-          >
-            <SearchIcon />
-          </button>
+          {galleryHidden ? "▲" : "▼"}
+        </button>
+      )}
+      {!galleryHidden && (
+        <div id="gallery" ref={listRef}>
+          {gallery.map(g => (
+            <div
+              key={g.id}
+              className={"g-item" + (bgImage === g.img ? " active" : "")}
+              onClick={() => useAsBg(g.id)}
+            >
+              <img src={g.img.src} alt="" />
+              <div className="g-cap">
+                {(g.prompt || "image") + "  " + g.img.naturalWidth + "×" + g.img.naturalHeight}
+              </div>
+              <button
+                className="g-del"
+                title="Remove from gallery"
+                onClick={e => {
+                  e.stopPropagation();
+                  deleteItem(g.id);
+                }}
+              >
+                ✕
+              </button>
+              <button
+                className="g-dl"
+                title="Download image"
+                onClick={e => {
+                  e.stopPropagation();
+                  downloadItem(g.id, g.img);
+                }}
+              >
+                ⬇
+              </button>
+              <button
+                className="g-view"
+                title="View image with generation params"
+                onClick={e => {
+                  e.stopPropagation();
+                  onPreview(g.id);
+                }}
+              >
+                <SearchIcon />
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

@@ -246,6 +246,16 @@ button:disabled:hover { border-color: var(--border); color: var(--text); }
   background: var(--panel); border-top: 1px solid var(--border);
 }
 #gallery:empty { display: none; }
+.gallery-wrap { position: relative; flex-shrink: 0; }
+.gallery-tab {
+  position: absolute; bottom: 100%; right: 12px;
+  z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 20px; padding: 0;
+  background: var(--panel); border: 1px solid var(--border); border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted); font-size: 10px; line-height: 1;
+}
 .g-item {
   position: relative; flex-shrink: 0; cursor: pointer;
   border: 2px solid var(--border); border-radius: 6px; overflow: hidden;

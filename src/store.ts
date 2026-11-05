@@ -172,6 +172,26 @@ function saveGrid(v: boolean): void {
   }
 }
 
+const LS_GALLERY_HIDDEN = "moss-image-sft-canvas:galleryHidden";
+
+function readSavedGalleryHidden(): boolean {
+  try {
+    const raw = localStorage.getItem(LS_GALLERY_HIDDEN);
+    if (raw === null) return false;
+    return raw === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveGalleryHidden(v: boolean): void {
+  try {
+    localStorage.setItem(LS_GALLERY_HIDDEN, v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 let genTimer: number | null = null;
 let genJobId: string | number | null = null;
 let genBaseUrl: string = "";
@@ -206,6 +226,7 @@ interface CanvasState extends GenParams {
   negPrompt: string;
   jsonMode: boolean;
   showGrid: boolean;
+  galleryHidden: boolean;
   labelHistory: string[];
   metaHistory: string[];
   schedOptions: string[];
@@ -248,6 +269,7 @@ interface CanvasState extends GenParams {
   setNegPrompt: (text: string) => void;
   setJsonMode: (v: boolean) => void;
   setShowGrid: (v: boolean) => void;
+  setGalleryHidden: (v: boolean) => void;
   removeLabelHistory: (label: string) => void;
   removeMetaHistory: (label: string) => void;
   rememberLabel: (label: string) => void;
@@ -328,6 +350,7 @@ export const useStore = create<CanvasState>()((set, get) => ({
   negPrompt: "",
   jsonMode: true,
   showGrid: readSavedGrid(),
+  galleryHidden: readSavedGalleryHidden(),
   labelHistory: loadHistory(LABEL_HISTORY_KEY),
   metaHistory: loadHistory(META_HISTORY_KEY),
 
@@ -476,6 +499,11 @@ export const useStore = create<CanvasState>()((set, get) => ({
   setShowGrid: (v) => {
     set({ showGrid: v });
     saveGrid(v);
+  },
+
+  setGalleryHidden: (v) => {
+    set({ galleryHidden: v });
+    saveGalleryHidden(v);
   },
 
   removeLabelHistory: (label) =>
