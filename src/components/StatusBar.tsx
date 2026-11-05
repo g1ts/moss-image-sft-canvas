@@ -15,6 +15,9 @@ export default function StatusBar() {
       <span id="stSize">
         canvas {width}×{height}
       </span>
+      <a id="stGithub" href="https://github.com/g1ts/moss-image-sft-canvas" target="_blank" rel="noreferrer">
+        GitHub
+      </a>
     </div>
   );
 }

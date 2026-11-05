@@ -42,6 +42,7 @@ export interface GenParams {
   genCfg: string;
   genSeed: string;
   genClip: string;
+  genClipManual: boolean;
   genSched: string;
   genMethod: string;
   genLoras: GenLoraRow[];
@@ -263,6 +264,7 @@ export const useStore = create<CanvasState>()((set, get) => ({
   genCfg: "7",
   genSeed: "-1",
   genClip: "2",
+  genClipManual: false,
   genSched: "default",
   genMethod: "euler",
   genLoras: [],
@@ -545,7 +547,7 @@ export const useStore = create<CanvasState>()((set, get) => ({
         steps: s.genSteps,
         cfg: s.genCfg,
         seed: s.genSeed,
-        clip: s.genClip,
+        clip: s.genClipManual ? s.genClip : "-1",
         scheduler: s.genSched,
         method: s.genMethod,
         loras: s.genLoras

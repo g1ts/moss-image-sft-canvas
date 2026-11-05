@@ -63,7 +63,7 @@ export function buildGenBody(f: GenForm): {
     height,
     batch_count: count,
     seed,
-    clip_skip: clampInt(f.clip, 1, 12, 2),
+    clip_skip: f.clip.trim() === "-1" ? -1 : clampInt(f.clip, 1, 12, 2),
     sample_params: {
       scheduler: f.scheduler.trim() || "default",
       sample_method: f.method.trim() || "euler",

@@ -19,6 +19,7 @@ export default function GenerationSection({ open }: { open: boolean }) {
   const genCfg = useStore(s => s.genCfg);
   const genSeed = useStore(s => s.genSeed);
   const genClip = useStore(s => s.genClip);
+  const genClipManual = useStore(s => s.genClipManual);
   const genSched = useStore(s => s.genSched);
   const genMethod = useStore(s => s.genMethod);
   const genLoras = useStore(s => s.genLoras);
@@ -171,14 +172,26 @@ export default function GenerationSection({ open }: { open: boolean }) {
           <div className="gen-grid">
             <div className="gen-field">
               <label htmlFor="genClip">Clip skip</label>
-              <input
-                type="number"
-                id="genClip"
-                value={genClip}
-                min={1}
-                max={12}
-                onChange={e => setGenParam({ genClip: e.target.value })}
-              />
+              <div className="gen-clip-row">
+                <input
+                  type="number"
+                  id="genClip"
+                  value={genClipManual ? genClip : "-1"}
+                  min={1}
+                  max={12}
+                  disabled={!genClipManual}
+                  onChange={e => setGenParam({ genClip: e.target.value })}
+                />
+                <label className="switch" title="Manual clip skip (off = auto, sends -1 to the server)">
+                  <input
+                    type="checkbox"
+                    id="genClipManual"
+                    checked={genClipManual}
+                    onChange={e => setGenParam({ genClipManual: e.target.checked })}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                </label>
+              </div>
             </div>
             <div className="gen-field">
               <label htmlFor="genSched">Scheduler</label>
