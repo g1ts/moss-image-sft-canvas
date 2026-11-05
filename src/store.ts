@@ -20,9 +20,17 @@ import {
   waitForJob,
   JobCancelledError,
   type Job,
+  type JobPreview,
   type LoraInfo,
   type LoraRow
 } from "./lib/sdcpp";
+
+export interface GenPreviewFrame {
+  img: HTMLImageElement;
+  step: number;
+  totalSteps: number;
+  pass: number;
+}
 
 export interface GenLoraRow extends LoraRow {
   id: number;
@@ -47,6 +55,7 @@ export interface GenParams {
   genMethod: string;
   genLoras: GenLoraRow[];
   genFromCanvas: boolean;
+  genLivePreviewMode: string;
 }
 
 const LS_GEN_URL = "moss-image-sft-canvas.sdcpp.url";
@@ -67,6 +76,35 @@ function readSavedAutoBg(): boolean {
 function saveAutoBg(v: boolean): void {
   try {
     localStorage.setItem(LS_GEN_AUTO_BG, v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+const LS_GEN_LIVE_PREVIEW = "moss-image-sft-canvas:genLivePreview";
+const DEFAULT_LIVE_PREVIEW_MODE = "proj";
+
+function readSavedLivePreviewMode(): string {
+  try {
+    const raw = localStorage.getItem(LS_GEN_LIVE_PREVIEW);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "string") {
+        return parsed.length ? parsed : DEFAULT_LIVE_PREVIEW_MODE;
+      }
+      if (parsed && typeof parsed.mode === "string" && parsed.mode.length > 0) {
+        return parsed.on === false ? "none" : parsed.mode;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_LIVE_PREVIEW_MODE;
+}
+
+function saveLivePreviewMode(mode: string): void {
+  try {
+    localStorage.setItem(LS_GEN_LIVE_PREVIEW, JSON.stringify(mode));
   } catch {
     /* ignore */
   }
@@ -138,6 +176,7 @@ let genTimer: number | null = null;
 let genJobId: string | number | null = null;
 let genBaseUrl: string = "";
 let cancelRequested = false;
+let lastPreviewB64 = "";
 let loraRowId = 1;
 let catalogReq = 0;
 
@@ -158,6 +197,7 @@ interface CanvasState extends GenParams {
   gallery: GalleryItem[];
   genBusy: boolean;
   genStatus: GenStatus;
+  genPreviewFrame: GenPreviewFrame | null;
   cursor: { x: number; y: number } | null;
   action: string;
   metaText: string;
@@ -171,6 +211,7 @@ interface CanvasState extends GenParams {
   schedOptions: string[];
   samplerOptions: string[];
   loraOptions: LoraInfo[];
+  previewModes: string[];
   catalogLoading: boolean;
   catalogError: string | null;
   genAutoBg: boolean;
@@ -216,6 +257,7 @@ interface CanvasState extends GenParams {
   setGenBusy: (busy: boolean) => void;
   setGenStatus: (msg: string, isError: boolean) => void;
   setGenParam: (patch: Partial<GenParams>) => void;
+  setGenLivePreview: (mode: string) => void;
   setGenAutoBg: (v: boolean) => void;
   saveGenUrl: () => void;
   loadCatalog: () => Promise<void>;
@@ -256,6 +298,7 @@ export const useStore = create<CanvasState>()((set, get) => ({
   gallery: [],
   genBusy: false,
   genStatus: { msg: "", isError: false },
+  genPreviewFrame: null,
   genUrl: readSavedUrl(),
   genW: "512",
   genH: "512",
@@ -269,9 +312,11 @@ export const useStore = create<CanvasState>()((set, get) => ({
   genMethod: "euler",
   genLoras: [],
   genFromCanvas: true,
+  genLivePreviewMode: readSavedLivePreviewMode(),
   schedOptions: [],
   samplerOptions: [],
   loraOptions: [],
+  previewModes: [],
   catalogLoading: false,
   catalogError: null,
   genAutoBg: readSavedAutoBg(),
@@ -472,6 +517,11 @@ export const useStore = create<CanvasState>()((set, get) => ({
 
   setGenParam: (patch) => set(patch),
 
+  setGenLivePreview: (mode) => {
+    saveLivePreviewMode(mode);
+    set({ genLivePreviewMode: mode });
+  },
+
   setGenAutoBg: (v) => {
     set({ genAutoBg: v });
     saveAutoBg(v);
@@ -501,6 +551,7 @@ export const useStore = create<CanvasState>()((set, get) => ({
         schedOptions: cat.schedulers,
         samplerOptions: cat.samplers,
         loraOptions: cat.loras,
+        previewModes: cat.previewModes,
         catalogError: cat.error
       });
     } catch (e) {
@@ -550,7 +601,9 @@ export const useStore = create<CanvasState>()((set, get) => ({
         clip: s.genClipManual ? s.genClip : "-1",
         scheduler: s.genSched,
         method: s.genMethod,
-        loras: s.genLoras
+        loras: s.genLoras,
+        livePreviewMode: s.genAutoBg ? s.genLivePreviewMode : "none",
+        livePreviewModes: s.previewModes
       }));
     } catch (e) {
       set({ genStatus: { msg: (e as Error).message, isError: true } });
@@ -568,7 +621,8 @@ export const useStore = create<CanvasState>()((set, get) => ({
     genJobId = null;
     genBaseUrl = "";
     cancelRequested = false;
-    set({ genBusy: true });
+    lastPreviewB64 = "";
+    set({ genBusy: true, genPreviewFrame: null });
     const t0 = Date.now();
     try {
       const job = (await apiFetch(base + "/sdcpp/v1/img_gen", {
@@ -586,9 +640,31 @@ export const useStore = create<CanvasState>()((set, get) => ({
         await cancelJob(base, id);
       }
       genTimer = window.setInterval(() => {
-        set({ genStatus: { msg: "running... " + ((Date.now() - t0) / 1000).toFixed(0) + "s", isError: false } });
+        const frame = get().genPreviewFrame;
+        const suffix = frame && frame.totalSteps > 0
+          ? " · step " + frame.step + "/" + frame.totalSteps + (frame.pass > 1 ? " (pass " + frame.pass + ")" : "")
+          : "";
+        set({ genStatus: { msg: "running... " + ((Date.now() - t0) / 1000).toFixed(0) + "s" + suffix, isError: false } });
       }, 500);
-      const result = await waitForJob(base, job);
+      const result = await waitForJob(base, job, (preview: JobPreview) => {
+        if (!preview.b64_json || preview.b64_json === lastPreviewB64) return;
+        lastPreviewB64 = preview.b64_json;
+        loadImage("data:image/png;base64," + preview.b64_json)
+          .then(img => {
+            if (!get().genBusy) return;
+            set({
+              genPreviewFrame: {
+                img,
+                step: preview.step ?? 0,
+                totalSteps: preview.total_steps ?? 0,
+                pass: preview.pass ?? 1
+              }
+            });
+          })
+          .catch(() => {
+            /* skip a broken preview frame */
+          });
+      });
       const images = result.images || [];
       if (!images.length) throw new Error("the server did not return any images");
       const format = result.output_format || "png";
@@ -623,7 +699,8 @@ export const useStore = create<CanvasState>()((set, get) => ({
     } finally {
       genJobId = null;
       genBaseUrl = "";
-      set({ genBusy: false });
+      lastPreviewB64 = "";
+      set({ genBusy: false, genPreviewFrame: null });
     }
   },
 

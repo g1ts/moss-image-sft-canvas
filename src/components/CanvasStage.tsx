@@ -28,6 +28,8 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const hoveredId = useStore(s => s.hoveredId);
   const setHoveredId = useStore(s => s.setHoveredId);
   const bgImage = useStore(s => s.bgImage);
+  const genBusy = useStore(s => s.genBusy);
+  const genPreviewFrame = useStore(s => s.genPreviewFrame);
   const width = useStore(s => s.width);
   const height = useStore(s => s.height);
   const jsonMode = useStore(s => s.jsonMode);
@@ -43,8 +45,10 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     ctx.setTransform(renderScaleRef.current, 0, 0, renderScaleRef.current, 0, 0);
     ctx.clearRect(-W / 2, -H / 2, W, H);
     ctx.translate(W / 2, H / 2);
-    if (st.bgImage) {
-      ctx.drawImage(st.bgImage, -W / 2, -H / 2, W, H);
+    const frame = st.genBusy ? st.genPreviewFrame : null;
+    const bg = frame ? frame.img : st.bgImage;
+    if (bg) {
+      ctx.drawImage(bg, -W / 2, -H / 2, W, H);
     } else {
       ctx.fillStyle = "#191d23";
       ctx.fillRect(-W / 2, -H / 2, W, H);
@@ -165,7 +169,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
 
   useEffect(() => {
     draw();
-  }, [draw, boxes, selectedId, hoveredId, bgImage, jsonMode, showGrid]);
+  }, [draw, boxes, selectedId, hoveredId, bgImage, genBusy, genPreviewFrame, jsonMode, showGrid]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {

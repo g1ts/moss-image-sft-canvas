@@ -26,6 +26,9 @@ export default function GenerationSection({ open }: { open: boolean }) {
   const genFromCanvas = useStore(s => s.genFromCanvas);
   const genAutoBg = useStore(s => s.genAutoBg);
   const setGenAutoBg = useStore(s => s.setGenAutoBg);
+  const genLivePreviewMode = useStore(s => s.genLivePreviewMode);
+  const setGenLivePreview = useStore(s => s.setGenLivePreview);
+  const previewModes = useStore(s => s.previewModes);
   const schedOptions = useStore(s => s.schedOptions);
   const samplerOptions = useStore(s => s.samplerOptions);
   const loraOptions = useStore(s => s.loraOptions);
@@ -60,21 +63,42 @@ export default function GenerationSection({ open }: { open: boolean }) {
             }}
           />
         </div>
-        <div className="gen-switch-row">
-          <span className="switch-label">auto background after generation</span>
-          <label
-            className="switch"
-            title="After generation, automatically set the last image as the canvas background"
-          >
-            <input
-              type="checkbox"
-              id="genAutoBg"
-              checked={genAutoBg}
-              onChange={e => setGenAutoBg(e.target.checked)}
-            />
-            <span className="switch-track" aria-hidden="true" />
-          </label>
+        <div className="gen-switch-grid">
+          <div className="gen-switch-cell">
+            <span className="switch-label">auto background after generation</span>
+            <label
+              className="switch"
+              title="After generation, automatically set the last image as the canvas background"
+            >
+              <input
+                type="checkbox"
+                id="genAutoBg"
+                checked={genAutoBg}
+                onChange={e => setGenAutoBg(e.target.checked)}
+              />
+              <span className="switch-track" aria-hidden="true" />
+            </label>
+          </div>
+          <div className="gen-switch-cell gen-live-cell">
+            <span className="switch-label">live preview</span>
+            <select
+              id="genLivePreviewMode"
+              value={genLivePreviewMode}
+              title="How the server decodes preview frames (from /sdcpp/v1/capabilities); none disables live preview. Requires auto background"
+              disabled={!genAutoBg || previewModes.length === 0}
+              onChange={e => setGenLivePreview(e.target.value)}
+            >
+              {optionsWithCurrent(previewModes, genLivePreviewMode).map(v => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+        {previewModes.length === 0 && !catalogError && (
+          <p className="cs-hint">live preview: not supported by the server</p>
+        )}
       </div>
       <div className="cs-section">
         <h2>Size</h2>
