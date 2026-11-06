@@ -9,6 +9,8 @@ export interface Box {
   ymax: number;
   color: string;
   z: number;
+  hidden: boolean;
+  locked: boolean;
 }
 
 export interface LayoutSummary {

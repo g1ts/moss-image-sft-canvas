@@ -149,6 +149,39 @@ export default function BoxModal({
                 </div>
               </div>
               <div className="cs-section">
+                <h2>Display</h2>
+                <div className="row">
+                  <span className="switch-label">Hidden</span>
+                  <label
+                    className="switch"
+                    title="Hide the box from the canvas; it is also excluded from the JSON export and the generation prompt"
+                  >
+                    <input
+                      type="checkbox"
+                      id="bmHidden"
+                      aria-label="Hidden"
+                      checked={box.hidden}
+                      onChange={e => updateBox(box.id, { hidden: e.target.checked })}
+                    />
+                    <span className="switch-track" aria-hidden="true" />
+                  </label>
+                  <span className="switch-label">Locked</span>
+                  <label
+                    className="switch"
+                    title="Dashed outline, ignores mouse events (select, move, resize). Unlock via the Boxes list or this panel"
+                  >
+                    <input
+                      type="checkbox"
+                      id="bmLocked"
+                      aria-label="Locked"
+                      checked={box.locked}
+                      onChange={e => updateBox(box.id, { locked: e.target.checked })}
+                    />
+                    <span className="switch-track" aria-hidden="true" />
+                  </label>
+                </div>
+              </div>
+              <div className="cs-section">
                 <h2>Coordinates</h2>
                 <div className="bm-coords">
                   {COORD_KEYS.map(k => (

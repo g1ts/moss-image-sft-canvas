@@ -151,7 +151,7 @@ export function toLayoutText(summary: LayoutSummary, boxes: Box[]): string {
   summaryObj.caption = summary.caption;
   return JSON.stringify({
     summary: summaryObj,
-    items: boxes.map(b => {
+    items: boxes.filter(b => !b.hidden).map(b => {
       const n = norm(b);
       const item: Record<string, unknown> = { label: b.label };
       if (b.caption) item.caption = b.caption;

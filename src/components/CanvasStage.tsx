@@ -69,7 +69,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     if (drag && drag.mode === "draw") drawBox(ctx, drag.box, true, true, H, false);
     drawGuides(ctx, W, H, guidesRef.current);
     const sel = st.boxes.find(b => b.id === st.selectedId);
-    if (sel) drawHandles(ctx, cv, sel);
+    if (sel && !sel.hidden && !sel.locked) drawHandles(ctx, cv, sel);
   }, []);
 
   const applyAlign = useCallback((box: Box) => {
@@ -174,6 +174,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     const st = useStore.getState();
     const ordered = [...st.boxes].sort((a, b) => b.z - a.z);
     for (const b of ordered) {
+      if (b.hidden || b.locked) continue;
       const n = norm(b);
       if (p.x >= n.x1 && p.x <= n.x2 && p.y >= n.y1 && p.y <= n.y2) return b;
     }
@@ -191,7 +192,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
         return;
       }
       const sel = st.boxes.find(b => b.id === st.selectedId);
-      if (sel) {
+      if (sel && !sel.hidden && !sel.locked) {
         const h = hitHandle(sel, clientX, clientY);
         if (h) {
           cv.style.cursor =
@@ -340,7 +341,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     const p = toLogical(e.clientX, e.clientY);
     setHoveredId(null);
     const sel = st.boxes.find(b => b.id === st.selectedId);
-    if (sel) {
+    if (sel && !sel.hidden && !sel.locked) {
       const h = hitHandle(sel, e.clientX, e.clientY);
       if (h) {
         dragRef.current = { mode: "resize", handle: h, start: p, orig: { ...sel }, box: sel };
@@ -437,13 +438,14 @@ function drawGuides(ctx: CanvasRenderingContext2D, W: number, H: number, guides:
 }
 
 function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, preview: boolean, H: number, hovered: boolean) {
+  if (b.hidden) return;
   const n = norm(b);
   const w = n.x2 - n.x1, h = n.y2 - n.y1;
   ctx.fillStyle = hexToRgba(b.color, selected ? 0.15 : hovered ? 0.35 : 0.15);
   ctx.fillRect(n.x1, n.y1, w, h);
   ctx.lineWidth = selected ? 2.5 : hovered ? 2 : 1.5;
   ctx.strokeStyle = b.color;
-  ctx.setLineDash(preview ? [8, 5] : []);
+  ctx.setLineDash(preview ? [8, 5] : b.locked ? [6, 4] : []);
   ctx.strokeRect(n.x1, n.y1, w, h);
   ctx.setLineDash([]);
   if (hovered || preview) {

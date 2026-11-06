@@ -326,6 +326,8 @@ interface CanvasState extends GenParams {
       xmax?: number;
       ymin?: number;
       ymax?: number;
+      hidden?: boolean;
+      locked?: boolean;
     }
   ) => void;
   deleteBox: (id: number) => void;
@@ -471,7 +473,9 @@ export const useStore = create<CanvasState>()((set, get) => ({
       ymin: y,
       ymax: y,
       color: PALETTE[s.colorIndex % PALETTE.length],
-      z: topZ + 1
+      z: topZ + 1,
+      hidden: false,
+      locked: false
     };
     set({ nextId: s.nextId + 1, colorIndex: s.colorIndex + 1, selectedId: null });
     return box;
@@ -483,9 +487,13 @@ export const useStore = create<CanvasState>()((set, get) => ({
   touchBoxes: () => set(s => ({ boxes: [...s.boxes] })),
 
   updateBox: (id, patch) =>
-    set(s => ({
-      boxes: s.boxes.map(b => (b.id === id ? { ...b, ...patch } : b))
-    })),
+    set(s => {
+      const toggled = patch.hidden !== undefined || patch.locked !== undefined;
+      return {
+        boxes: s.boxes.map(b => (b.id === id ? { ...b, ...patch } : b)),
+        ...(toggled && s.hoveredId === id ? { hoveredId: null } : {})
+      };
+    }),
 
   deleteBox: (id) =>
     set(s => ({
@@ -540,7 +548,9 @@ export const useStore = create<CanvasState>()((set, get) => ({
         xmin: Math.min(bx, dx),
         xmax: Math.max(bx, dx),
         color: PALETTE[colorIndex++ % PALETTE.length],
-        z: i + 1
+        z: i + 1,
+        hidden: false,
+        locked: false
       };
     });
     const sm = parsed.summary;
