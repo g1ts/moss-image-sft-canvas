@@ -16,6 +16,8 @@ export default function JsonPanel() {
   const setMetaText = useStore(s => s.setMetaText);
   const setCanvasType = useStore(s => s.setCanvasType);
   const removeMetaHistory = useStore(s => s.removeMetaHistory);
+  const beginChange = useStore(s => s.beginChange);
+  const endChange = useStore(s => s.endChange);
   const rememberMeta = useStore(s => s.rememberMeta);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -123,6 +125,8 @@ export default function JsonPanel() {
             excludeValues={metaTokens}
             onSelect={selectMetaToken}
             onChange={setMetaText}
+            onFocus={beginChange}
+            onBlur={endChange}
             onRemove={removeMetaHistory}
             onCommit={rememberMeta}
           />
@@ -136,6 +140,8 @@ export default function JsonPanel() {
             placeholder="single"
             spellCheck={false}
             onChange={e => setCanvasType(e.target.value)}
+            onFocus={beginChange}
+            onBlur={endChange}
           />
         </div>
         <div

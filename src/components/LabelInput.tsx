@@ -9,6 +9,8 @@ type Props = {
   inputRef?: RefObject<HTMLInputElement | null>;
   onChange: (value: string) => void;
   onEnter?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   onRemove?: (value: string) => void;
   // Final commit of the value (blur, selection from the list, Enter)
   onCommit?: (value: string) => void;
@@ -31,6 +33,8 @@ export default function LabelInput({
   inputRef,
   onChange,
   onEnter,
+  onFocus,
+  onBlur,
   onRemove,
   onCommit,
   readOnlyValues,
@@ -138,10 +142,12 @@ export default function LabelInput({
         }}
         onFocus={() => {
           if (filtered.length > 0) setOpen(true);
+          onFocus?.();
         }}
         onBlur={() => {
           setOpen(false);
           if (onCommit) onCommit(value);
+          onBlur?.();
         }}
         onKeyDown={onKeyDown}
       />

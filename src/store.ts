@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Box, GalleryItem, GenItemParams, LayoutSummary } from "./types";
 import { PALETTE, clampInt, toLayoutText, type ParsedLayout } from "./lib/geometry";
+import { createHistory, type History } from "./lib/undoHistory";
 import {
   LABEL_HISTORY_KEY,
   META_HISTORY_KEY,
@@ -305,6 +306,14 @@ interface CanvasState extends GenParams {
   catalogLoading: boolean;
   catalogError: string | null;
   genAutoBg: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+
+  undo: () => void;
+  redo: () => void;
+  beginChange: () => void;
+  endChange: () => void;
+  cancelChange: () => void;
 
   applySize: (w: number, h: number) => void;
   setUploadedBg: (img: HTMLImageElement | null, info: string) => void;
@@ -367,6 +376,55 @@ interface CanvasState extends GenParams {
   useAsBg: (id: number) => void;
 }
 
+// Undo/redo operates on the internal document state (not the exported JSON):
+// every Box keeps its hidden/locked flags, so "hidden" and "deleted" stay distinct steps.
+//
+// Change sessions (beginChange/endChange) cover both mouse drags (mousedown/mouseup)
+// and text fields (focus/blur): the snapshot is taken when the session starts and pushed
+// to the history on session end only if the document actually changed — so a whole
+// typing session is a single undo step.
+interface DocSnap {
+  boxes: Box[];
+  metaText: string;
+  canvasType: string;
+  sceneCaption: string;
+  negPrompt: string;
+}
+
+const UNDO_LIMIT = 100;
+const UNDO_COALESCE_MS = 500;
+
+function docSnap(s: CanvasState): DocSnap {
+  return {
+    boxes: s.boxes.map(b => ({ ...b })),
+    metaText: s.metaText,
+    canvasType: s.canvasType,
+    sceneCaption: s.sceneCaption,
+    negPrompt: s.negPrompt
+  };
+}
+
+// z is excluded on purpose: a plain click raises a box to the front and must not create a step
+function docFingerprint(s: DocSnap): string {
+  const boxes = s.boxes
+    .map(b =>
+      [b.xmin, b.xmax, b.ymin, b.ymax, b.label, b.caption, b.text, b.color, b.hidden ? 1 : 0, b.locked ? 1 : 0].join(":")
+    )
+    .join("|");
+  return boxes + "#" + s.metaText + "#" + s.canvasType + "#" + s.sceneCaption + "#" + s.negPrompt;
+}
+
+const history: History<DocSnap> = createHistory<DocSnap>({
+  limit: UNDO_LIMIT,
+  coalesceMs: UNDO_COALESCE_MS,
+  fingerprint: docFingerprint
+});
+
+// keys of discrete operations must be unique (undo of a delete inside the coalesce window of a new delete)
+let opSeq = 0;
+
+const histFlags = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
+
 export function summaryFromState(s: { metaText: string; canvasType: string; sceneCaption: string }): LayoutSummary {
   return {
     meta: splitMeta(s.metaText),
@@ -377,7 +435,29 @@ export function summaryFromState(s: { metaText: string; canvasType: string; scen
 
 const savedSize = readSavedSize();
 
-export const useStore = create<CanvasState>()((set, get) => ({
+export const useStore = create<CanvasState>()((set, get) => {
+  // restore a document snapshot, dropping selection refs that no longer exist
+  const setDoc = (snap: DocSnap) => {
+    history.cancel(); // a pending text-edit session is stale once the document is replaced
+    const s = get();
+    const ids = new Set(snap.boxes.map(b => b.id));
+    const keep = (id: number | null) => (id !== null && !ids.has(id) ? null : id);
+    const pendingBoxId = keep(s.pendingBoxId);
+    set({
+      boxes: snap.boxes.map(b => ({ ...b })),
+      metaText: snap.metaText,
+      canvasType: snap.canvasType,
+      sceneCaption: snap.sceneCaption,
+      negPrompt: snap.negPrompt,
+      selectedId: keep(s.selectedId),
+      hoveredId: keep(s.hoveredId),
+      pendingBoxId,
+      pendingIsNew: pendingBoxId !== null ? s.pendingIsNew : false,
+      ...histFlags()
+    });
+  };
+
+  return ({
   width: savedSize.w,
   height: savedSize.h,
   boxes: [],
@@ -430,6 +510,32 @@ export const useStore = create<CanvasState>()((set, get) => ({
   galleryHidden: readSavedGalleryHidden(),
   labelHistory: loadHistory(LABEL_HISTORY_KEY),
   metaHistory: loadHistory(META_HISTORY_KEY),
+  canUndo: false,
+  canRedo: false,
+
+  undo: () => {
+    const snap = history.undo(docSnap(get()));
+    if (!snap) return;
+    setDoc(snap);
+  },
+
+  redo: () => {
+    const snap = history.redo(docSnap(get()));
+    if (!snap) return;
+    setDoc(snap);
+  },
+
+  beginChange: () => {
+    history.begin(docSnap(get()));
+  },
+
+  endChange: () => {
+    if (history.end(docSnap(get()))) set(histFlags());
+  },
+
+  cancelChange: () => {
+    history.cancel();
+  },
 
   applySize: (w, h) => {
     set({ width: w, height: h });
@@ -453,7 +559,12 @@ export const useStore = create<CanvasState>()((set, get) => ({
 
   setHoveredId: (id) => set(s => (s.hoveredId === id ? {} : { hoveredId: id })),
 
-  setPendingBoxId: (id) => set({ pendingBoxId: id, pendingIsNew: false }),
+  // commit any pending text-edit session: closing the modal (Enter, Escape, buttons)
+  // unmounts the focused field, so its blur event never fires
+  setPendingBoxId: (id) => {
+    history.end(docSnap(get()));
+    set({ pendingBoxId: id, pendingIsNew: false, ...histFlags() });
+  },
 
   openBoxEditor: (id) => {
     get().select(id);
@@ -486,36 +597,61 @@ export const useStore = create<CanvasState>()((set, get) => ({
 
   touchBoxes: () => set(s => ({ boxes: [...s.boxes] })),
 
-  updateBox: (id, patch) =>
-    set(s => {
+  updateBox: (id, patch) => {
+    const s = get();
+    if (!s.boxes.some(b => b.id === id)) return;
+    // label/caption/text edit live while the field is focused — their session commits on blur
+    const isText = patch.label !== undefined || patch.caption !== undefined || patch.text !== undefined;
+    if (!isText) {
+      const field =
+        patch.xmin !== undefined || patch.xmax !== undefined || patch.ymin !== undefined || patch.ymax !== undefined
+          ? "coords"
+          : Object.keys(patch)[0] || "patch";
+      history.record(docSnap(s), "box:" + id + ":" + field);
+    }
+    set(s2 => {
       const toggled = patch.hidden !== undefined || patch.locked !== undefined;
       return {
-        boxes: s.boxes.map(b => (b.id === id ? { ...b, ...patch } : b)),
-        ...(toggled && s.hoveredId === id ? { hoveredId: null } : {})
+        boxes: s2.boxes.map(b => (b.id === id ? { ...b, ...patch } : b)),
+        ...(toggled && s2.hoveredId === id ? { hoveredId: null } : {}),
+        ...histFlags()
       };
-    }),
+    });
+  },
 
-  deleteBox: (id) =>
-    set(s => ({
-      boxes: s.boxes.filter(b => b.id !== id),
-      selectedId: s.selectedId === id ? null : s.selectedId,
-      hoveredId: s.hoveredId === id ? null : s.hoveredId,
-      pendingBoxId: s.pendingBoxId === id ? null : s.pendingBoxId,
-      pendingIsNew: s.pendingBoxId === id ? false : s.pendingIsNew
-    })),
+  deleteBox: (id) => {
+    const s = get();
+    if (!s.boxes.some(b => b.id === id)) return;
+    history.record(docSnap(s), "op:" + ++opSeq);
+    set(s2 => ({
+      boxes: s2.boxes.filter(b => b.id !== id),
+      selectedId: s2.selectedId === id ? null : s2.selectedId,
+      hoveredId: s2.hoveredId === id ? null : s2.hoveredId,
+      pendingBoxId: s2.pendingBoxId === id ? null : s2.pendingBoxId,
+      pendingIsNew: s2.pendingBoxId === id ? false : s2.pendingIsNew,
+      ...histFlags()
+    }));
+  },
 
-  moveBox: (id, toIndex) =>
-    set(s => {
-      const from = s.boxes.findIndex(b => b.id === id);
+  moveBox: (id, toIndex) => {
+    const s = get();
+    if (s.boxes.findIndex(b => b.id === id) === -1) return;
+    history.record(docSnap(s), "op:" + ++opSeq);
+    set(s2 => {
+      const from = s2.boxes.findIndex(b => b.id === id);
       if (from === -1) return {};
-      const boxes = s.boxes.slice();
+      const boxes = s2.boxes.slice();
       const [box] = boxes.splice(from, 1);
       const target = Math.max(0, Math.min(from < toIndex ? toIndex - 1 : toIndex, boxes.length));
       boxes.splice(target, 0, box);
-      return { boxes };
-    }),
+      return { boxes, ...histFlags() };
+    });
+  },
 
-  clearAll: () =>
+  clearAll: () => {
+    const s = get();
+    const empty = !s.boxes.length && !s.metaText && !s.canvasType && !s.sceneCaption && !s.negPrompt;
+    if (!empty) history.record(docSnap(s), "op:" + ++opSeq);
     set({
       boxes: [],
       selectedId: null,
@@ -525,8 +661,10 @@ export const useStore = create<CanvasState>()((set, get) => ({
       metaText: "",
       canvasType: "single",
       sceneCaption: "",
-      negPrompt: ""
-    }),
+      negPrompt: "",
+      ...histFlags()
+    });
+  },
 
   importLayout: (parsed) => {
     const s = get();
@@ -554,6 +692,15 @@ export const useStore = create<CanvasState>()((set, get) => ({
       };
     });
     const sm = parsed.summary;
+    const nextMeta = sm ? sm.meta.join(", ") : s.metaText;
+    const nextCanvas = sm ? sm.canvas : s.canvasType;
+    const nextCaption = sm ? sm.caption : s.sceneCaption;
+    if (
+      docFingerprint({ boxes, metaText: nextMeta, canvasType: nextCanvas, sceneCaption: nextCaption, negPrompt: s.negPrompt }) !==
+      docFingerprint({ boxes: s.boxes, metaText: s.metaText, canvasType: s.canvasType, sceneCaption: s.sceneCaption, negPrompt: s.negPrompt })
+    ) {
+      history.record(docSnap(s), "op:" + ++opSeq);
+    }
     saveHistory(LABEL_HISTORY_KEY, labelHistory);
     saveHistory(META_HISTORY_KEY, metaHistory);
     set({
@@ -564,20 +711,33 @@ export const useStore = create<CanvasState>()((set, get) => ({
       metaHistory,
       selectedId: null,
       hoveredId: null,
-      ...(sm
-        ? {
-            metaText: sm.meta.join(", "),
-            canvasType: sm.canvas,
-            sceneCaption: sm.caption
-          }
-        : {})
+      metaText: nextMeta,
+      canvasType: nextCanvas,
+      sceneCaption: nextCaption,
+      ...histFlags()
     });
   },
 
-  setMetaText: (text) => set({ metaText: text }),
-  setCanvasType: (text) => set({ canvasType: text }),
-  setSceneCaption: (text) => set({ sceneCaption: text }),
-  setNegPrompt: (text) => set({ negPrompt: text }),
+  // typing sessions commit on blur (see beginChange/endChange)
+  setMetaText: (text) => {
+    if (get().metaText === text) return;
+    set({ metaText: text });
+  },
+
+  setCanvasType: (text) => {
+    if (get().canvasType === text) return;
+    set({ canvasType: text });
+  },
+
+  setSceneCaption: (text) => {
+    if (get().sceneCaption === text) return;
+    set({ sceneCaption: text });
+  },
+
+  setNegPrompt: (text) => {
+    if (get().negPrompt === text) return;
+    set({ negPrompt: text });
+  },
 
   setJsonMode: (v) => set({ jsonMode: v }),
 
@@ -894,4 +1054,5 @@ export const useStore = create<CanvasState>()((set, get) => ({
         g.img.naturalWidth + "×" + g.img.naturalHeight + " → " + s.width + "×" + s.height + " (generated)"
     });
   }
-}));
+  });
+});

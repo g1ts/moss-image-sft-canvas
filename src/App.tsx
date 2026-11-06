@@ -13,6 +13,21 @@ import ImagePreviewModal from "./components/ImagePreviewModal";
 import GearIcon from "./components/GearIcon";
 import { useStore } from "./store";
 
+// text fields that are part of the document snapshot — Ctrl+Z there runs the store undo
+const DOC_FIELD_IDS = new Set([
+  "jsonMeta",
+  "jsonCanvas",
+  "sumCaption",
+  "sumNegPrompt",
+  "bmLabel",
+  "bmCaption",
+  "bmText",
+  "bmXmin",
+  "bmXmax",
+  "bmYmin",
+  "bmYmax"
+]);
+
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false);
@@ -24,6 +39,34 @@ export default function App() {
   const jsonMode = useStore(s => s.jsonMode);
   const generate = useStore(s => s.generate);
   const cancelGeneration = useStore(s => s.cancelGeneration);
+  const canUndo = useStore(s => s.canUndo);
+  const canRedo = useStore(s => s.canRedo);
+  const undo = useStore(s => s.undo);
+  const redo = useStore(s => s.redo);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      // e.code is layout-independent, so the shortcut works on the Russian layout too
+      const code = e.code;
+      if (code !== "KeyZ" && code !== "KeyY") return;
+      const el = document.activeElement;
+      if (el) {
+        const tag = el.tagName;
+        const editable =
+          tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (el instanceof HTMLElement && el.isContentEditable);
+        // non-document fields (URL, generation params, sizes) keep the browser's native undo
+        if (editable && !(el instanceof HTMLElement && DOC_FIELD_IDS.has(el.id))) return;
+      }
+      e.preventDefault();
+      const st = useStore.getState();
+      if (code === "KeyY" && !e.shiftKey) st.redo();
+      else if (code === "KeyZ" && e.shiftKey) st.redo();
+      else st.undo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!settingsOpen && !canvasSettingsOpen && pendingBoxId === null && previewItemId === null)
@@ -58,6 +101,50 @@ export default function App() {
           Visual bounding-box layout editor: draw boxes, export JSON, generate images
         </span>
         <div className="header-actions">
+          <button
+            id="btnUndo"
+            className="gear-btn"
+            aria-label="Undo"
+            title="Undo (Ctrl+Z)"
+            disabled={!canUndo}
+            onClick={() => undo()}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 14 4 9l5-5" />
+              <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11" />
+            </svg>
+          </button>
+          <button
+            id="btnRedo"
+            className="gear-btn"
+            aria-label="Redo"
+            title="Redo (Ctrl+Shift+Z)"
+            disabled={!canRedo}
+            onClick={() => redo()}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 14 5-5-5-5" />
+              <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5a5.5 5.5 0 0 0 5.5 5.5H13" />
+            </svg>
+          </button>
           <span
             id="genStatus"
             title={genStatus.msg}

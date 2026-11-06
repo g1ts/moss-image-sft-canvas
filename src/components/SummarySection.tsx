@@ -6,6 +6,8 @@ export default function SummarySection() {
   const jsonMode = useStore(s => s.jsonMode);
   const setSceneCaption = useStore(s => s.setSceneCaption);
   const setNegPrompt = useStore(s => s.setNegPrompt);
+  const beginChange = useStore(s => s.beginChange);
+  const endChange = useStore(s => s.endChange);
 
   return (
     <div className="section">
@@ -18,6 +20,8 @@ export default function SummarySection() {
           spellCheck={false}
           value={sceneCaption}
           onChange={e => setSceneCaption(e.target.value)}
+          onFocus={beginChange}
+          onBlur={endChange}
         />
       </div>
       <div className="row">
@@ -28,6 +32,8 @@ export default function SummarySection() {
           spellCheck={false}
           value={negPrompt}
           onChange={e => setNegPrompt(e.target.value)}
+          onFocus={beginChange}
+          onBlur={endChange}
         />
       </div>
     </div>

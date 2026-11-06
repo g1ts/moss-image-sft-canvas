@@ -34,6 +34,8 @@ export default function BoxModal({
   const deleteBox = useStore(s => s.deleteBox);
   const removeLabelHistory = useStore(s => s.removeLabelHistory);
   const rememberLabel = useStore(s => s.rememberLabel);
+  const beginChange = useStore(s => s.beginChange);
+  const endChange = useStore(s => s.endChange);
   const [drafts, setDrafts] = useState<Drafts>(EMPTY_DRAFTS);
   const labelRef = useRef<HTMLInputElement>(null);
 
@@ -102,6 +104,8 @@ export default function BoxModal({
                       readOnlyValues={DEFAULT_LABELS}
                       onChange={v => updateBox(box.id, { label: v })}
                       onEnter={onClose}
+                      onFocus={beginChange}
+                      onBlur={endChange}
                       onRemove={removeLabelHistory}
                       onCommit={rememberLabel}
                     />
@@ -115,6 +119,8 @@ export default function BoxModal({
                       placeholder="caption — description"
                       spellCheck={false}
                       onChange={e => updateBox(box.id, { caption: e.target.value })}
+                      onFocus={beginChange}
+                      onBlur={endChange}
                     />
                   </div>
                   <div>
@@ -129,6 +135,8 @@ export default function BoxModal({
                       onKeyDown={e => {
                         if (e.key === "Enter") onClose();
                       }}
+                      onFocus={beginChange}
+                      onBlur={endChange}
                     />
                   </div>
                 </div>

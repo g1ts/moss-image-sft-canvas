@@ -295,6 +295,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
           commitBox(drag.box);
           st.touchBoxes();
         }
+        st.endChange();
         dragRef.current = null;
         guidesRef.current = null;
         st.setAction("");
@@ -312,7 +313,17 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
           e.preventDefault();
         }
       } else if (e.key === "Escape") {
-        if (dragRef.current) {
+        const drag = dragRef.current;
+        if (drag) {
+          if (drag.mode !== "draw") {
+            const o = drag.orig, b = drag.box;
+            b.xmin = o.xmin;
+            b.xmax = o.xmax;
+            b.ymin = o.ymin;
+            b.ymax = o.ymax;
+            st.touchBoxes();
+          }
+          st.cancelChange();
           dragRef.current = null;
           guidesRef.current = null;
           st.setAction("");
@@ -344,6 +355,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     if (sel && !sel.hidden && !sel.locked) {
       const h = hitHandle(sel, e.clientX, e.clientY);
       if (h) {
+        st.beginChange();
         dragRef.current = { mode: "resize", handle: h, start: p, orig: { ...sel }, box: sel };
         return;
       }
@@ -351,10 +363,12 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     const hit = hitBox(p);
     if (hit) {
       st.select(hit.id);
+      st.beginChange();
       dragRef.current = { mode: "move", start: p, orig: { ...hit }, box: hit };
       return;
     }
     const box = st.beginDraw(p.x, p.y);
+    st.beginChange();
     dragRef.current = { mode: "draw", box };
   };
 
