@@ -22,6 +22,8 @@ const RATIOS: RatioPreset[] = [
 
 const DEFAULT_SIZE = { w: 512, h: 512 };
 
+const GRID_SIZES = [10, 25, 50, 100, 200];
+
 const TIERS: TierPreset[] = [
   { label: "0.25 MP · 512", area: 512 * 512 },
   { label: "1 MP · ~1K", area: 1024 * 1024 },
@@ -59,8 +61,15 @@ export default function CanvasSettingsModal({
   const applySize = useStore(s => s.applySize);
   const showGrid = useStore(s => s.showGrid);
   const setShowGrid = useStore(s => s.setShowGrid);
+  const gridSize = useStore(s => s.gridSize);
+  const setGridSize = useStore(s => s.setGridSize);
+  const snapToGrid = useStore(s => s.snapToGrid);
+  const setSnapToGrid = useStore(s => s.setSnapToGrid);
+  const alignEnabled = useStore(s => s.alignEnabled);
+  const setAlignEnabled = useStore(s => s.setAlignEnabled);
   const [draftW, setDraftW] = useState<string | null>(null);
   const [draftH, setDraftH] = useState<string | null>(null);
+  const [draftGrid, setDraftGrid] = useState<string | null>(null);
   const [ratioLocked, setRatioLocked] = useState(() => {
     const st = useStore.getState();
     return RATIOS.some(rt => Math.abs(st.width / st.height - rt.w / rt.h) / (rt.w / rt.h) < RATIO_TOL);
@@ -76,6 +85,12 @@ export default function CanvasSettingsModal({
   const clearDrafts = () => {
     setDraftW(null);
     setDraftH(null);
+  };
+
+  const commitGrid = () => {
+    if (draftGrid === null) return;
+    setGridSize(draftGrid);
+    setDraftGrid(null);
   };
 
   const pickRatio = (rt: RatioPreset) => {
@@ -249,6 +264,62 @@ export default function CanvasSettingsModal({
                 />
                 <span className="switch-track" aria-hidden="true" />
               </label>
+              <span className="switch-label">Snap</span>
+              <label className="switch" title="Snap boxes to the grid while dragging">
+                <input
+                  type="checkbox"
+                  id="snapToggle"
+                  aria-label="Snap to grid"
+                  checked={snapToGrid}
+                  onChange={e => setSnapToGrid(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
+              <span className="switch-label">Align</span>
+              <label className="switch" title="Snap to box and canvas lines, with guide lines">
+                <input
+                  type="checkbox"
+                  id="alignToggle"
+                  aria-label="Alignment guides and magnet"
+                  checked={alignEnabled}
+                  onChange={e => setAlignEnabled(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <span className="switch-label" style={{ flexShrink: 0 }}>Size</span>
+              <div className="chip-row" style={{ flex: 1, minWidth: 0 }}>
+                {GRID_SIZES.map(g => (
+                  <button
+                    key={g}
+                    type="button"
+                    className={"chip chip-grid" + (gridSize === g ? " sel" : "")}
+                    onClick={() => {
+                      setGridSize(g);
+                      setDraftGrid(null);
+                    }}
+                  >
+                    <span className="chip-label">{g}px</span>
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  id="csGridSize"
+                  className="grid-size-input"
+                  min={4}
+                  max={2048}
+                  step={1}
+                  spellCheck={false}
+                  aria-label="Grid size (px)"
+                  value={draftGrid !== null ? draftGrid : String(gridSize)}
+                  onChange={e => setDraftGrid(e.target.value)}
+                  onBlur={commitGrid}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") commitGrid();
+                  }}
+                />
+              </div>
             </div>
           </div>
           <BackgroundSection />

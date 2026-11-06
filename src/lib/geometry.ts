@@ -34,6 +34,75 @@ export function commitBox(b: Box): void {
   b.ymax = Math.round(n.y2);
 }
 
+export function snapVal(v: number, step: number): number {
+  return Math.round(v / step) * step;
+}
+
+export interface AlignGuide {
+  axis: "x" | "y";
+  at: number;
+}
+
+export interface AlignResult {
+  guides: AlignGuide[];
+  dx: number;
+  dy: number;
+}
+
+function bestFeatureMatch(features: number[], cands: number[], threshold: number): { f: number; at: number } | null {
+  let f = -1;
+  let at = 0;
+  let best = Infinity;
+  for (let i = 0; i < features.length; i++) {
+    for (const c of cands) {
+      const d = Math.abs(features[i] - c);
+      if (d <= threshold && d < best) {
+        best = d;
+        f = i;
+        at = c;
+      }
+    }
+  }
+  return f >= 0 ? { f, at } : null;
+}
+
+export function alignCandidates(others: Box[], W: number, H: number): { candX: number[]; candY: number[] } {
+  const candX = [-W / 2, 0, W / 2];
+  const candY = [-H / 2, 0, H / 2];
+  for (const o of others) {
+    const m = norm(o);
+    candX.push(m.x1, m.x2, (m.x1 + m.x2) / 2);
+    candY.push(m.y1, m.y2, (m.y1 + m.y2) / 2);
+  }
+  return { candX, candY };
+}
+
+export function snapToCandidate(value: number, cands: number[], threshold: number): number | null {
+  const m = bestFeatureMatch([value], cands, threshold);
+  return m ? m.at : null;
+}
+
+export function computeAlign(moving: Box, others: Box[], W: number, H: number, threshold: number): AlignResult {
+  const n = norm(moving);
+  const cx = (n.x1 + n.x2) / 2;
+  const cy = (n.y1 + n.y2) / 2;
+  const { candX, candY } = alignCandidates(others, W, H);
+  const guides: AlignGuide[] = [];
+  let dx = 0;
+  let dy = 0;
+  const hx = bestFeatureMatch([n.x1, n.x2, cx], candX, threshold);
+  if (hx) {
+    dx = hx.f === 0 ? hx.at - n.x1 : hx.f === 1 ? hx.at - n.x2 : hx.at - cx;
+    guides.push({ axis: "x", at: hx.at });
+  }
+  const hy = bestFeatureMatch([n.y1, n.y2, cy], candY, threshold);
+  if (hy) {
+    dy = hy.f === 0 ? hy.at - n.y1 : hy.f === 1 ? hy.at - n.y2 : hy.at - cy;
+    guides.push({ axis: "y", at: hy.at });
+  }
+  return { guides, dx, dy };
+}
+
 export function boxText(b: Box): string {
   const n = norm(b);
   return "[" + Math.round(n.y1) + ", " + Math.round(n.x1) + ", " + Math.round(n.y2) + ", " + Math.round(n.x2) + "]";

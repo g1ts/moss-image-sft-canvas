@@ -110,7 +110,7 @@ export default function BoxModal({
                     <label htmlFor="bmCaption">caption</label>
                     <textarea
                       id="bmCaption"
-                      rows={3}
+                      rows={6}
                       value={box.caption}
                       placeholder="caption — description"
                       spellCheck={false}

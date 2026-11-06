@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Box, GalleryItem, GenItemParams, LayoutSummary } from "./types";
-import { PALETTE, toLayoutText, type ParsedLayout } from "./lib/geometry";
+import { PALETTE, clampInt, toLayoutText, type ParsedLayout } from "./lib/geometry";
 import {
   LABEL_HISTORY_KEY,
   META_HISTORY_KEY,
@@ -172,6 +172,72 @@ function saveGrid(v: boolean): void {
   }
 }
 
+const LS_GRID_SIZE = "moss-image-sft-canvas:gridSize";
+const MIN_GRID_SIZE = 4;
+const MAX_GRID_SIZE = 2048;
+const DEFAULT_GRID_SIZE = 50;
+
+function readSavedGridSize(): number {
+  try {
+    const raw = localStorage.getItem(LS_GRID_SIZE);
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (isFinite(n) && n >= MIN_GRID_SIZE && n <= MAX_GRID_SIZE) return n;
+    }
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_GRID_SIZE;
+}
+
+function saveGridSize(v: number): void {
+  try {
+    localStorage.setItem(LS_GRID_SIZE, String(v));
+  } catch {
+    /* ignore */
+  }
+}
+
+const LS_SNAP_GRID = "moss-image-sft-canvas:snapToGrid";
+
+function readSavedSnapGrid(): boolean {
+  try {
+    const raw = localStorage.getItem(LS_SNAP_GRID);
+    if (raw === null) return false;
+    return raw !== "0";
+  } catch {
+    return false;
+  }
+}
+
+function saveSnapGrid(v: boolean): void {
+  try {
+    localStorage.setItem(LS_SNAP_GRID, v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+const LS_ALIGN = "moss-image-sft-canvas:alignEnabled";
+
+function readSavedAlign(): boolean {
+  try {
+    const raw = localStorage.getItem(LS_ALIGN);
+    if (raw === null) return true;
+    return raw !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function saveAlign(v: boolean): void {
+  try {
+    localStorage.setItem(LS_ALIGN, v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 const LS_GALLERY_HIDDEN = "moss-image-sft-canvas:galleryHidden";
 
 function readSavedGalleryHidden(): boolean {
@@ -226,6 +292,9 @@ interface CanvasState extends GenParams {
   negPrompt: string;
   jsonMode: boolean;
   showGrid: boolean;
+  gridSize: number;
+  snapToGrid: boolean;
+  alignEnabled: boolean;
   galleryHidden: boolean;
   labelHistory: string[];
   metaHistory: string[];
@@ -269,6 +338,9 @@ interface CanvasState extends GenParams {
   setNegPrompt: (text: string) => void;
   setJsonMode: (v: boolean) => void;
   setShowGrid: (v: boolean) => void;
+  setGridSize: (v: string | number) => void;
+  setSnapToGrid: (v: boolean) => void;
+  setAlignEnabled: (v: boolean) => void;
   setGalleryHidden: (v: boolean) => void;
   removeLabelHistory: (label: string) => void;
   removeMetaHistory: (label: string) => void;
@@ -350,6 +422,9 @@ export const useStore = create<CanvasState>()((set, get) => ({
   negPrompt: "",
   jsonMode: true,
   showGrid: readSavedGrid(),
+  gridSize: readSavedGridSize(),
+  snapToGrid: readSavedSnapGrid(),
+  alignEnabled: readSavedAlign(),
   galleryHidden: readSavedGalleryHidden(),
   labelHistory: loadHistory(LABEL_HISTORY_KEY),
   metaHistory: loadHistory(META_HISTORY_KEY),
@@ -499,6 +574,22 @@ export const useStore = create<CanvasState>()((set, get) => ({
   setShowGrid: (v) => {
     set({ showGrid: v });
     saveGrid(v);
+  },
+
+  setGridSize: (v) => {
+    const n = clampInt(v, MIN_GRID_SIZE, MAX_GRID_SIZE, DEFAULT_GRID_SIZE);
+    set({ gridSize: n });
+    saveGridSize(n);
+  },
+
+  setSnapToGrid: (v) => {
+    set({ snapToGrid: v });
+    saveSnapGrid(v);
+  },
+
+  setAlignEnabled: (v) => {
+    set({ alignEnabled: v });
+    saveAlign(v);
   },
 
   setGalleryHidden: (v) => {

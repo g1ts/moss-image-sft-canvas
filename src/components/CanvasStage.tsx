@@ -2,12 +2,17 @@ import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } fr
 import { useStore } from "../store";
 import GearIcon from "./GearIcon";
 import {
+  alignCandidates,
   boxSize,
   boxText,
   commitBox,
+  computeAlign,
   handlePoints,
   hexToRgba,
   norm,
+  snapToCandidate,
+  snapVal,
+  type AlignGuide,
   type Pt
 } from "../lib/geometry";
 import type { Box } from "../types";
@@ -22,6 +27,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const wrapRef = useRef<HTMLDivElement>(null);
   const renderScaleRef = useRef(1);
   const dragRef = useRef<Drag | null>(null);
+  const guidesRef = useRef<AlignGuide[] | null>(null);
 
   const boxes = useStore(s => s.boxes);
   const selectedId = useStore(s => s.selectedId);
@@ -34,6 +40,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const height = useStore(s => s.height);
   const jsonMode = useStore(s => s.jsonMode);
   const showGrid = useStore(s => s.showGrid);
+  const gridSize = useStore(s => s.gridSize);
 
   const draw = useCallback(() => {
     const cv = canvasRef.current;
@@ -53,15 +60,67 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       ctx.fillStyle = "#191d23";
       ctx.fillRect(-W / 2, -H / 2, W, H);
     }
-    if (st.showGrid) drawGrid(ctx, W, H);
+    if (st.showGrid) drawGrid(ctx, W, H, st.gridSize);
     if (!st.jsonMode) return;
     const ordered = [...st.boxes].sort((a, b) => a.z - b.z);
     const hovId = st.hoveredId;
     for (const b of ordered) drawBox(ctx, b, b.id === st.selectedId, false, H, b.id === hovId);
     const drag = dragRef.current;
     if (drag && drag.mode === "draw") drawBox(ctx, drag.box, true, true, H, false);
+    drawGuides(ctx, W, H, guidesRef.current);
     const sel = st.boxes.find(b => b.id === st.selectedId);
     if (sel) drawHandles(ctx, cv, sel);
+  }, []);
+
+  const applyAlign = useCallback((box: Box) => {
+    const st = useStore.getState();
+    if (!st.alignEnabled) {
+      guidesRef.current = null;
+      return;
+    }
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const threshold = alignThreshold(cv, st.width);
+    const others = st.boxes.filter(b => b.id !== box.id);
+    const res = computeAlign(box, others, st.width, st.height, threshold);
+    guidesRef.current = res.guides;
+    if (res.dx !== 0) {
+      box.xmin += res.dx;
+      box.xmax += res.dx;
+    }
+    if (res.dy !== 0) {
+      box.ymin += res.dy;
+      box.ymax += res.dy;
+    }
+  }, []);
+
+  const applyAlignEdge = useCallback((box: Box, handle: string) => {
+    const st = useStore.getState();
+    if (!st.alignEnabled) {
+      guidesRef.current = null;
+      return;
+    }
+    const cv = canvasRef.current;
+    if (!cv) {
+      guidesRef.current = null;
+      return;
+    }
+    const threshold = alignThreshold(cv, st.width);
+    const others = st.boxes.filter(b => b.id !== box.id);
+    const { candX, candY } = alignCandidates(others, st.width, st.height);
+    const guides: AlignGuide[] = [];
+    const tryEdge = (axis: "x" | "y", key: "xmin" | "xmax" | "ymin" | "ymax") => {
+      const at = snapToCandidate(box[key], axis === "x" ? candX : candY, threshold);
+      if (at !== null) {
+        box[key] = at;
+        guides.push({ axis, at });
+      }
+    };
+    if (handle.includes("w")) tryEdge("x", "xmin");
+    if (handle.includes("e")) tryEdge("x", "xmax");
+    if (handle.includes("n")) tryEdge("y", "ymin");
+    if (handle.includes("s")) tryEdge("y", "ymax");
+    guidesRef.current = guides;
   }, []);
 
   const resizeCanvas = useCallback(() => {
@@ -169,7 +228,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
 
   useEffect(() => {
     draw();
-  }, [draw, boxes, selectedId, hoveredId, bgImage, genBusy, genPreviewFrame, jsonMode, showGrid]);
+  }, [draw, boxes, selectedId, hoveredId, bgImage, genBusy, genPreviewFrame, jsonMode, showGrid, gridSize]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -182,28 +241,37 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
         return;
       }
       if (drag.mode === "draw") {
-        drag.box.xmax = p.x;
-        drag.box.ymax = p.y;
+        drag.box.xmax = st.snapToGrid ? snapVal(p.x, st.gridSize) : p.x;
+        drag.box.ymax = st.snapToGrid ? snapVal(p.y, st.gridSize) : p.y;
+        applyAlignEdge(drag.box, "se");
         st.setAction(boxText(drag.box) + "  " + boxSize(drag.box));
         draw();
       } else if (drag.mode === "move") {
-        const dx = Math.round(p.x - drag.start.x);
-        const dy = Math.round(p.y - drag.start.y);
+        const dx = p.x - drag.start.x;
+        const dy = p.y - drag.start.y;
         const o = drag.orig, b = drag.box;
-        b.xmin = o.xmin + dx;
-        b.xmax = o.xmax + dx;
-        b.ymin = o.ymin + dy;
-        b.ymax = o.ymax + dy;
+        const ndx = st.snapToGrid ? snapVal(o.xmin + dx, st.gridSize) - o.xmin : Math.round(dx);
+        const ndy = st.snapToGrid ? snapVal(o.ymin + dy, st.gridSize) - o.ymin : Math.round(dy);
+        b.xmin = o.xmin + ndx;
+        b.xmax = o.xmax + ndx;
+        b.ymin = o.ymin + ndy;
+        b.ymax = o.ymax + ndy;
+        applyAlign(b);
         st.setAction("move: " + boxText(b));
         draw();
       } else {
-        const dx = Math.round(p.x - drag.start.x);
-        const dy = Math.round(p.y - drag.start.y);
+        const dx = p.x - drag.start.x;
+        const dy = p.y - drag.start.y;
         const o = drag.orig, b = drag.box, h = drag.handle;
-        if (h.includes("w")) b.xmin = o.xmin + dx;
-        if (h.includes("e")) b.xmax = o.xmax + dx;
-        if (h.includes("n")) b.ymin = o.ymin + dy;
-        if (h.includes("s")) b.ymax = o.ymax + dy;
+        const sx = h.includes("w") ? o.xmin : o.xmax;
+        const sy = h.includes("n") ? o.ymin : o.ymax;
+        const ndx = st.snapToGrid ? snapVal(sx + dx, st.gridSize) - sx : Math.round(dx);
+        const ndy = st.snapToGrid ? snapVal(sy + dy, st.gridSize) - sy : Math.round(dy);
+        if (h.includes("w")) b.xmin = o.xmin + ndx;
+        if (h.includes("e")) b.xmax = o.xmax + ndx;
+        if (h.includes("n")) b.ymin = o.ymin + ndy;
+        if (h.includes("s")) b.ymax = o.ymax + ndy;
+        applyAlignEdge(b, h);
         st.setAction("resize: " + boxText(b));
         draw();
       }
@@ -213,23 +281,24 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       const drag = dragRef.current;
       if (!drag) return;
       const st = useStore.getState();
-      if (drag.mode === "draw") {
-        const b = drag.box;
-        commitBox(b);
-        if (b.xmax - b.xmin < 2 || b.ymax - b.ymin < 2) {
-          st.select(null);
+        if (drag.mode === "draw") {
+          const b = drag.box;
+          commitBox(b);
+          if (b.xmax - b.xmin < 2 || b.ymax - b.ymin < 2) {
+            st.select(null);
+          } else {
+            b.label = "object";
+            st.finishDraw(b);
+          }
         } else {
-          b.label = "object";
-          st.finishDraw(b);
+          commitBox(drag.box);
+          st.touchBoxes();
         }
-      } else {
-        commitBox(drag.box);
-        st.touchBoxes();
-      }
-      dragRef.current = null;
-      st.setAction("");
-      draw();
-    };
+        dragRef.current = null;
+        guidesRef.current = null;
+        st.setAction("");
+        draw();
+      };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = document.activeElement ? document.activeElement.tagName : "";
@@ -244,6 +313,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       } else if (e.key === "Escape") {
         if (dragRef.current) {
           dragRef.current = null;
+          guidesRef.current = null;
           st.setAction("");
           draw();
         } else if (st.selectedId) {
@@ -260,7 +330,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [draw, toLogical, updateCursor]);
+  }, [draw, toLogical, updateCursor, applyAlign, applyAlignEdge]);
 
   const onMouseDown = (e: ReactMouseEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
@@ -316,8 +386,12 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   );
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  const step = 50;
+function alignThreshold(cv: HTMLCanvasElement, stWidth: number): number {
+  const r = cv.getBoundingClientRect();
+  return r.width > 0 ? 4 * (stWidth / r.width) : 4;
+}
+
+function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, step: number) {
   ctx.lineWidth = 1;
   const k0 = Math.ceil(-W / 2 / step), k1 = Math.floor(W / 2 / step);
   for (let k = k0; k <= k1; k++) {
@@ -343,6 +417,23 @@ function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
   }
   ctx.strokeStyle = "rgba(255,255,255,0.30)";
   ctx.strokeRect(-W / 2, -H / 2, W, H);
+}
+
+function drawGuides(ctx: CanvasRenderingContext2D, W: number, H: number, guides: AlignGuide[] | null) {
+  if (!guides || !guides.length) return;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#ff4d6d";
+  for (const g of guides) {
+    ctx.beginPath();
+    if (g.axis === "x") {
+      ctx.moveTo(g.at + 0.5, -H / 2);
+      ctx.lineTo(g.at + 0.5, H / 2);
+    } else {
+      ctx.moveTo(-W / 2, g.at + 0.5);
+      ctx.lineTo(W / 2, g.at + 0.5);
+    }
+    ctx.stroke();
+  }
 }
 
 function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, preview: boolean, H: number, hovered: boolean) {

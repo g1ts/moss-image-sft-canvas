@@ -379,6 +379,8 @@ label.chk input[type=checkbox] { accent-color: var(--accent); margin: 0; cursor:
 .chip-tier .chip-title { font-size: 12px; font-weight: 600; white-space: nowrap; }
 .chip-tier .chip-sub { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .chip.sel .chip-sub { color: rgba(11, 18, 32, .75); }
+.chip-grid { min-width: 54px; padding: 5px 10px; flex-direction: row; }
+.row input[type=number].grid-size-input { flex: 0 0 64px; width: 64px; }
 .btn-toggle { white-space: nowrap; }
 .cs-dims { display: flex; gap: 12px; margin-top: 10px; }
 .cs-dims > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
