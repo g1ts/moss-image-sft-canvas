@@ -1,6 +1,16 @@
 import type { Box } from "../types";
 
 export const DEFAULT_LABELS = ["object", "text", "character"];
+export const DEFAULT_METAS = [
+  "poster",
+  "photo",
+  "illustration",
+  "infographic",
+  "comic",
+  "anime",
+  "3d render",
+  "product shot"
+];
 
 const MAX_HISTORY = 100;
 

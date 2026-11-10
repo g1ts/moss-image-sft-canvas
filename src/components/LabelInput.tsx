@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 
 type Props = {
   id: string;
   value: string;
   options: string[];
   placeholder?: string;
+  // A button rendered inside the field (on the right)
+  trailing?: ReactNode;
+  // A popover rendered above the field (e.g. a custom picker)
+  overlay?: ReactNode;
+  // Suppress the built-in autocomplete list
+  disableList?: boolean;
   inputRef?: RefObject<HTMLInputElement | null>;
   onChange: (value: string) => void;
   onEnter?: () => void;
@@ -30,6 +36,9 @@ export default function LabelInput({
   value,
   options,
   placeholder,
+  trailing,
+  overlay,
+  disableList,
   inputRef,
   onChange,
   onEnter,
@@ -114,16 +123,16 @@ export default function LabelInput({
       }
       return;
     }
-    if (e.key === "Escape" && open) {
+    if (e.key === "Escape" && open && !disableList) {
       e.stopPropagation();
       setOpen(false);
     }
   };
 
-  const showList = open && filtered.length > 0;
+  const showList = !disableList && open && filtered.length > 0;
 
   return (
-    <div className="label-combo" ref={rootRef}>
+    <div className={"label-combo" + (trailing ? " has-trailing" : "")} ref={rootRef}>
       <input
         id={id}
         ref={inputRef}
@@ -138,10 +147,10 @@ export default function LabelInput({
         aria-controls={showList ? id + "list" : undefined}
         onChange={e => {
           onChange(e.target.value);
-          setOpen(true);
+          if (!disableList) setOpen(true);
         }}
         onFocus={() => {
-          if (filtered.length > 0) setOpen(true);
+          if (!disableList && filtered.length > 0) setOpen(true);
           onFocus?.();
         }}
         onBlur={() => {
@@ -151,6 +160,7 @@ export default function LabelInput({
         }}
         onKeyDown={onKeyDown}
       />
+      {trailing}
       {showList && (
         <ul
           className="label-combo-list"
@@ -196,6 +206,7 @@ export default function LabelInput({
           })}
         </ul>
       )}
+      {overlay}
     </div>
   );
 }

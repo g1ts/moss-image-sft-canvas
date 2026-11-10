@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, summaryFromState } from "../store";
 import { parseLayout, toLayoutText } from "../lib/geometry";
 import { splitMeta } from "../lib/valueHistory";
+import GearIcon from "./GearIcon";
 import LabelInput from "./LabelInput";
+import MetaPicker from "./MetaPicker";
 
 export default function JsonPanel() {
   const boxes = useStore(s => s.boxes);
@@ -15,14 +17,36 @@ export default function JsonPanel() {
   const metaHistory = useStore(s => s.metaHistory);
   const setMetaText = useStore(s => s.setMetaText);
   const setCanvasType = useStore(s => s.setCanvasType);
-  const removeMetaHistory = useStore(s => s.removeMetaHistory);
   const beginChange = useStore(s => s.beginChange);
   const endChange = useStore(s => s.endChange);
   const rememberMeta = useStore(s => s.rememberMeta);
+  const removeMetaValue = useStore(s => s.removeMetaValue);
+  const addMetaValue = useStore(s => s.addMetaValue);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [metaPickerOpen, setMetaPickerOpen] = useState(false);
+  const metaRowRef = useRef<HTMLDivElement>(null);
 
   const metaTokens = useMemo(() => splitMeta(metaText), [metaText]);
+
+  // Close the meta picker on an outside click or Escape
+  useEffect(() => {
+    if (!metaPickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (metaRowRef.current && !metaRowRef.current.contains(e.target as Node)) {
+        setMetaPickerOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMetaPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [metaPickerOpen]);
 
   const canonical = toLayoutText(
     summaryFromState({ metaText, canvasType, sceneCaption }),
@@ -113,7 +137,7 @@ export default function JsonPanel() {
           padding: "0 12px 12px"
         }}
       >
-        <div className="row" style={{ flexShrink: 0 }}>
+        <div className="row" style={{ flexShrink: 0 }} ref={metaRowRef}>
           <label className="fl" htmlFor="jsonMeta">meta</label>
           <LabelInput
             id="jsonMeta"
@@ -127,8 +151,31 @@ export default function JsonPanel() {
             onChange={setMetaText}
             onFocus={beginChange}
             onBlur={endChange}
-            onRemove={removeMetaHistory}
             onCommit={rememberMeta}
+            trailing={
+              <button
+                type="button"
+                className="combo-trailing"
+                aria-label="Edit meta values"
+                title="Edit meta values"
+                aria-expanded={metaPickerOpen}
+                onClick={() => setMetaPickerOpen(o => !o)}
+              >
+                <GearIcon />
+              </button>
+            }
+            disableList
+            overlay={
+              metaPickerOpen ? (
+                <MetaPicker
+                  tokens={metaTokens}
+                  history={metaHistory}
+                  onRemove={removeMetaValue}
+                  onPick={addMetaValue}
+                  onClose={() => setMetaPickerOpen(false)}
+                />
+              ) : undefined
+            }
           />
         </div>
         <div className="row" style={{ flexShrink: 0 }}>

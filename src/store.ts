@@ -344,6 +344,8 @@ interface CanvasState extends GenParams {
   clearAll: () => void;
   importLayout: (parsed: ParsedLayout) => void;
   setMetaText: (text: string) => void;
+  removeMetaValue: (value: string) => void;
+  addMetaValue: (value: string) => void;
   setCanvasType: (text: string) => void;
   setSceneCaption: (text: string) => void;
   setNegPrompt: (text: string) => void;
@@ -354,7 +356,6 @@ interface CanvasState extends GenParams {
   setAlignEnabled: (v: boolean) => void;
   setGalleryHidden: (v: boolean) => void;
   removeLabelHistory: (label: string) => void;
-  removeMetaHistory: (label: string) => void;
   rememberLabel: (label: string) => void;
   rememberMeta: (text: string) => void;
   setCursor: (x: number, y: number) => void;
@@ -724,6 +725,43 @@ export const useStore = create<CanvasState>()((set, get) => {
     set({ metaText: text });
   },
 
+  // Discrete edits from the meta picker: a pending typing session is committed first,
+  // then the step is recorded, so both stay separately undoable
+  removeMetaValue: (value) => {
+    const s = get();
+    const k = value.trim().toLowerCase();
+    if (!k) return;
+    const cur = splitMeta(s.metaText);
+    const next = cur.filter(t => t.toLowerCase() !== k);
+    if (next.length === cur.length) return;
+    history.end(docSnap(s));
+    history.record(docSnap(s), "op:" + ++opSeq);
+    set({ metaText: next.join(", "), ...histFlags() });
+    if (document.activeElement === document.getElementById("jsonMeta")) {
+      history.begin(docSnap(get()));
+    }
+  },
+
+  addMetaValue: (value) => {
+    const v = value.trim();
+    if (!v) return;
+    const s = get();
+    const cur = splitMeta(s.metaText);
+    if (cur.some(t => t.toLowerCase() === v.toLowerCase())) return;
+    history.end(docSnap(s));
+    history.record(docSnap(s), "op:" + ++opSeq);
+    const mh = rememberValues(s.metaHistory, [v]);
+    saveHistory(META_HISTORY_KEY, mh);
+    set({
+      metaText: cur.length ? cur.join(", ") + ", " + v : v,
+      metaHistory: mh,
+      ...histFlags()
+    });
+    if (document.activeElement === document.getElementById("jsonMeta")) {
+      history.begin(docSnap(get()));
+    }
+  },
+
   setCanvasType: (text) => {
     if (get().canvasType === text) return;
     set({ canvasType: text });
@@ -772,13 +810,6 @@ export const useStore = create<CanvasState>()((set, get) => {
       const next = removeValue(s.labelHistory, label);
       saveHistory(LABEL_HISTORY_KEY, next);
       return { labelHistory: next };
-    }),
-
-  removeMetaHistory: (label) =>
-    set(s => {
-      const next = removeValue(s.metaHistory, label);
-      saveHistory(META_HISTORY_KEY, next);
-      return { metaHistory: next };
     }),
 
   // Writing to history — only on actual blur / selection / close
