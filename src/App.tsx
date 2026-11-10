@@ -28,6 +28,10 @@ export default function App() {
   const canRedo = useStore(s => s.canRedo);
   const undo = useStore(s => s.undo);
   const redo = useStore(s => s.redo);
+  const snapToGrid = useStore(s => s.snapToGrid);
+  const setSnapToGrid = useStore(s => s.setSnapToGrid);
+  const alignEnabled = useStore(s => s.alignEnabled);
+  const setAlignEnabled = useStore(s => s.setAlignEnabled);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,56 +89,79 @@ export default function App() {
   return (
     <>
       <header>
-        <h1>MOSS-Image-SFT Canvas</h1>
-        <span className="hint">
-          Visual bounding-box layout editor: draw boxes, export JSON, generate images
-        </span>
+        <h1 title="Visual bounding-box layout editor: draw boxes, export JSON, generate images">
+          MOSS-Image-SFT Canvas
+        </h1>
         <div className="header-actions">
-          <div className="history-nav">
-            <button
-              id="btnUndo"
-              className="gear-btn"
-              aria-label="Undo"
-              title="Undo (Ctrl+Z)"
-              disabled={!canUndo}
-              onClick={() => undo()}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          <div className="header-tools">
+            <div className="history-nav">
+              <button
+                id="btnUndo"
+                className="gear-btn"
+                aria-label="Undo"
+                title="Undo (Ctrl+Z)"
+                disabled={!canUndo}
+                onClick={() => undo()}
               >
-                <path d="M9 14 4 9l5-5" />
-                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11" />
-              </svg>
-            </button>
-            <button
-              id="btnRedo"
-              className="gear-btn"
-              aria-label="Redo"
-              title="Redo (Ctrl+Shift+Z)"
-              disabled={!canRedo}
-              onClick={() => redo()}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 14 4 9l5-5" />
+                  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11" />
+                </svg>
+              </button>
+              <button
+                id="btnRedo"
+                className="gear-btn"
+                aria-label="Redo"
+                title="Redo (Ctrl+Shift+Z)"
+                disabled={!canRedo}
+                onClick={() => redo()}
               >
-                <path d="m15 14 5-5-5-5" />
-                <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5a5.5 5.5 0 0 0 5.5 5.5H13" />
-              </svg>
-            </button>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m15 14 5-5-5-5" />
+                  <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5a5.5 5.5 0 0 0 5.5 5.5H13" />
+                </svg>
+              </button>
+            </div>
+            <div className="header-grid">
+              <span className="switch-label">Snap</span>
+              <label className="switch" title="Snap boxes to the grid while dragging">
+                <input
+                  type="checkbox"
+                  aria-label="Snap to grid"
+                  checked={snapToGrid}
+                  onChange={e => setSnapToGrid(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
+              <span className="switch-label">Align</span>
+              <label className="switch" title="Snap to box and canvas lines, with guide lines">
+                <input
+                  type="checkbox"
+                  aria-label="Alignment guides and magnet"
+                  checked={alignEnabled}
+                  onChange={e => setAlignEnabled(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
+            </div>
           </div>
           <span
             id="genStatus"

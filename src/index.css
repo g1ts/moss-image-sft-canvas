@@ -32,7 +32,6 @@ header {
   flex-shrink: 0;
 }
 header h1 { font-size: 15px; font-weight: 600; }
-header .hint { font-size: 12px; color: var(--muted); }
 main { flex: 1; display: flex; min-height: 0; }
 aside.left {
   width: 280px; min-width: 280px;
@@ -301,9 +300,20 @@ button:disabled:hover { border-color: var(--border); color: var(--text); }
   flex-grow: 1;
   flex-shrink: 0;
 }
+.header-tools {
+  display: flex; align-items: center;
+  gap: 10px;
+  margin-left: 100px; margin-right: auto;
+  flex-shrink: 0;
+}
 .history-nav {
   display: inline-flex; align-items: center; gap: 8px;
-  margin-right: auto; flex-shrink: 0;
+  flex-shrink: 0;
+}
+.header-grid {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex-shrink: 0; padding-left: 10px;
+  border-left: 1px solid var(--border);
 }
 .gear-btn {
   display: inline-flex; align-items: center; justify-content: center;
