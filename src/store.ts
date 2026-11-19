@@ -167,6 +167,26 @@ function saveGrid(v: boolean): void {
   }
 }
 
+const LS_SHOW_CAPTIONS = "moss-image-sft-canvas:showCaptions";
+
+function readSavedShowCaptions(): boolean {
+  try {
+    const raw = localStorage.getItem(LS_SHOW_CAPTIONS);
+    if (raw === null) return false;
+    return raw !== "0";
+  } catch {
+    return false;
+  }
+}
+
+function saveShowCaptions(v: boolean): void {
+  try {
+    localStorage.setItem(LS_SHOW_CAPTIONS, v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 const LS_GRID_SIZE = "moss-image-sft-canvas:gridSize";
 const MIN_GRID_SIZE = 4;
 const MAX_GRID_SIZE = 2048;
@@ -440,6 +460,7 @@ interface CanvasState extends GenParams {
   action: string;
   jsonMode: boolean;
   showGrid: boolean;
+  showCaptions: boolean;
   gridSize: number;
   snapToGrid: boolean;
   alignEnabled: boolean;
@@ -506,6 +527,7 @@ interface CanvasState extends GenParams {
   setNegPrompt: (text: string) => void;
   setJsonMode: (v: boolean) => void;
   setShowGrid: (v: boolean) => void;
+  setShowCaptions: (v: boolean) => void;
   setGridSize: (v: string | number) => void;
   setSnapToGrid: (v: boolean) => void;
   setAlignEnabled: (v: boolean) => void;
@@ -722,6 +744,7 @@ export const useStore = create<CanvasState>()((set, get) => {
   action: "",
   jsonMode: true,
   showGrid: readSavedGrid(),
+  showCaptions: readSavedShowCaptions(),
   gridSize: readSavedGridSize(),
   snapToGrid: readSavedSnapGrid(),
   alignEnabled: readSavedAlign(),
@@ -1260,6 +1283,11 @@ export const useStore = create<CanvasState>()((set, get) => {
   setShowGrid: (v) => {
     set({ showGrid: v });
     saveGrid(v);
+  },
+
+  setShowCaptions: (v) => {
+    set({ showCaptions: v });
+    saveShowCaptions(v);
   },
 
   setGridSize: (v) => {

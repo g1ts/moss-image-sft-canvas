@@ -67,6 +67,8 @@ export default function CanvasSettingsModal({
   const setSnapToGrid = useStore(s => s.setSnapToGrid);
   const alignEnabled = useStore(s => s.alignEnabled);
   const setAlignEnabled = useStore(s => s.setAlignEnabled);
+  const showCaptions = useStore(s => s.showCaptions);
+  const setShowCaptions = useStore(s => s.setShowCaptions);
   const [draftW, setDraftW] = useState<string | null>(null);
   const [draftH, setDraftH] = useState<string | null>(null);
   const [draftGrid, setDraftGrid] = useState<string | null>(null);
@@ -320,6 +322,22 @@ export default function CanvasSettingsModal({
                   }}
                 />
               </div>
+            </div>
+          </div>
+          <div className="cs-section">
+            <h2>Boxes</h2>
+            <div className="row">
+              <span className="switch-label">Captions</span>
+              <label className="switch" title="Show the caption text of each box on the canvas, inside the box">
+                <input
+                  type="checkbox"
+                  id="captionsToggle"
+                  aria-label="Show box captions on the canvas"
+                  checked={showCaptions}
+                  onChange={e => setShowCaptions(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
             </div>
           </div>
           <BackgroundSection />

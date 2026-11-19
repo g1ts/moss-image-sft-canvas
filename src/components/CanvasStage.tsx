@@ -13,7 +13,8 @@ import {
   snapToCandidate,
   snapVal,
   type AlignGuide,
-  type Pt
+  type Pt,
+  type Rect
 } from "../lib/geometry";
 import type { Box } from "../types";
 
@@ -41,6 +42,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const height = scene.height;
   const jsonMode = useStore(s => s.jsonMode);
   const showGrid = useStore(s => s.showGrid);
+  const showCaptions = useStore(s => s.showCaptions);
   const gridSize = useStore(s => s.gridSize);
 
   const draw = useCallback(() => {
@@ -66,9 +68,9 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     if (!st.jsonMode) return;
     const ordered = [...sc.boxes].sort((a, b) => a.z - b.z);
     const hovId = st.hoveredId;
-    for (const b of ordered) drawBox(ctx, b, b.id === st.selectedId, false, H, b.id === hovId);
+    for (const b of ordered) drawBox(ctx, b, b.id === st.selectedId, false, H, b.id === hovId, st.showCaptions);
     const drag = dragRef.current;
-    if (drag && drag.mode === "draw") drawBox(ctx, drag.box, true, true, H, false);
+    if (drag && drag.mode === "draw") drawBox(ctx, drag.box, true, true, H, false, st.showCaptions);
     drawGuides(ctx, W, H, guidesRef.current);
     const sel = sc.boxes.find(b => b.id === st.selectedId);
     if (sel && !sel.hidden && !sel.locked) drawHandles(ctx, cv, sel);
@@ -235,7 +237,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
 
   useEffect(() => {
     draw();
-  }, [draw, boxes, selectedId, hoveredId, bgImage, genBusy, genPreviewFrame, jsonMode, showGrid, gridSize]);
+  }, [draw, boxes, selectedId, hoveredId, bgImage, genBusy, genPreviewFrame, jsonMode, showGrid, showCaptions, gridSize]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -464,7 +466,7 @@ function drawGuides(ctx: CanvasRenderingContext2D, W: number, H: number, guides:
   }
 }
 
-function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, preview: boolean, H: number, hovered: boolean) {
+function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, preview: boolean, H: number, hovered: boolean, showCaptions: boolean) {
   if (b.hidden) return;
   const n = norm(b);
   const w = n.x2 - n.x1, h = n.y2 - n.y1;
@@ -475,6 +477,7 @@ function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, previ
   ctx.setLineDash(preview ? [8, 5] : b.locked ? [6, 4] : []);
   ctx.strokeRect(n.x1, n.y1, w, h);
   ctx.setLineDash([]);
+  if (showCaptions) drawBoxCaption(ctx, b, n, H);
   if (hovered || preview) {
     const text = (b.label ? b.label + "   " : "") + Math.round(w) + "×" + Math.round(h);
     const fs = 13;
@@ -487,6 +490,60 @@ function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, previ
     ctx.fillStyle = "#ffffff";
     ctx.fillText(text, n.x1 + 1, ty);
   }
+}
+
+function drawBoxCaption(ctx: CanvasRenderingContext2D, b: Box, n: Rect, H: number) {
+  const cap = b.caption.trim();
+  if (!cap) return;
+  const fs = Math.max(11, Math.round(H * 0.016));
+  const pad = fs * 0.4;
+  const bw = n.x2 - n.x1, bh = n.y2 - n.y1;
+  if (bw < fs * 1.5 || bh < fs * 1.2) return;
+  ctx.font = "500 " + fs + "px system-ui, sans-serif";
+  const maxW = bw - pad * 2;
+  const lines: string[] = [];
+  for (const raw of cap.split(/\r?\n/)) {
+    let line = "";
+    for (const word of raw.split(/\s+/).filter(s => s.length > 0)) {
+      const t = line ? line + " " + word : word;
+      if (!line || ctx.measureText(t).width <= maxW) line = t;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    lines.push(line);
+  }
+  const maxLines = Math.floor((bh - pad * 2) / (fs * 1.2));
+  if (maxLines < 1) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(n.x1, n.y1, bw, bh);
+  ctx.clip();
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "rgba(0,0,0,0.8)";
+  ctx.shadowBlur = fs * 0.3;
+  const ellipsis = "…";
+  let y = n.y1 + pad + fs * 0.8;
+  for (let i = 0; i < maxLines; i++) {
+    const last = i === maxLines - 1;
+    let text = lines[i] ?? "";
+    if (last && lines.length > maxLines) {
+      const room = maxW - ctx.measureText(ellipsis).width;
+      text = clipToWidth(ctx, text, room) + ellipsis;
+    }
+    if (text) ctx.fillText(text, n.x1 + pad, y);
+    y += fs * 1.2;
+  }
+  ctx.restore();
+}
+
+function clipToWidth(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (maxW <= 0) return "";
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t).width > maxW) t = t.slice(0, -1);
+  return t;
 }
 
 function drawHandles(ctx: CanvasRenderingContext2D, cv: HTMLCanvasElement, b: Box) {
