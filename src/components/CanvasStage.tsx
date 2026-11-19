@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
-import { useStore, activeScene } from "../store";
+import { useStore, activeScene, blurActiveField } from "../store";
 import GearIcon from "./GearIcon";
 import {
   alignCandidates,
@@ -318,6 +318,11 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
           st.deleteBox(st.selectedId);
           e.preventDefault();
         }
+      } else if (e.key === "d" && (e.ctrlKey || e.metaKey)) {
+        if (st.jsonMode && st.selectedId) {
+          st.duplicateBox(st.selectedId);
+          e.preventDefault();
+        }
       } else if (e.key === "Escape") {
         const drag = dragRef.current;
         if (drag) {
@@ -353,6 +358,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const onMouseDown = (e: ReactMouseEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    blurActiveField();
     const st = useStore.getState();
     if (!st.jsonMode) return;
     const p = toLogical(e.clientX, e.clientY);

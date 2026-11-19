@@ -87,6 +87,43 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Clear the box selection when the cursor moves to a text field or clicks outside
+  // the canvas, so hotkeys never silently "go into the field" while a box is selected
+  useEffect(() => {
+    const clearSelection = () => {
+      const st = useStore.getState();
+      if (st.selectedId !== null) st.select(null);
+    };
+    // The box modal edits the selected box and its hotkeys are already disabled while it is open
+    const isBoxModalTarget = (t: Element) =>
+      useStore.getState().pendingBoxId !== null && t.closest(".modal") !== null;
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const tag = t.tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT" && !t.isContentEditable) return;
+      if (isBoxModalTarget(t)) return;
+      clearSelection();
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const wrap = document.getElementById("canvasWrap");
+      if (wrap && wrap.contains(t)) return;
+      if (t.closest(".box-item") !== null) return; // box list rows select on click themselves
+      if (isBoxModalTarget(t)) return;
+      clearSelection();
+    };
+    // capture phase: must run before React's close handlers reset pendingBoxId
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("mousedown", onMouseDown, true);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("mousedown", onMouseDown, true);
+    };
+  }, []);
+
   return (
     <>
       <header>

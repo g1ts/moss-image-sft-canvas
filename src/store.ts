@@ -494,6 +494,7 @@ interface CanvasState extends GenParams {
     }
   ) => void;
   deleteBox: (id: number) => void;
+  duplicateBox: (id: number) => void;
   moveBox: (id: number, toIndex: number) => void;
   clearAll: () => void;
   importLayout: (parsed: ParsedLayout) => void;
@@ -533,6 +534,18 @@ interface CanvasState extends GenParams {
 
 export function activeScene(s: { scenes: Scene[]; activeSceneId: number }): Scene {
   return s.scenes.find(sc => sc.id === s.activeSceneId) ?? s.scenes[0];
+}
+
+// The canvas and the boxes own the keyboard: whenever a box becomes selected (or the
+// mouse goes down on the canvas) a focused text field is blurred, so hotkeys can never
+// silently "go into the field" while a box is selected
+export function blurActiveField(): void {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) {
+    el.blur();
+  }
 }
 
 // Undo/redo is kept per scene (not the exported JSON):
@@ -926,7 +939,8 @@ export const useStore = create<CanvasState>()((set, get) => {
     set({ bgImage: img });
   },
 
-  select: (id) =>
+  select: (id) => {
+    if (id !== null) blurActiveField();
     set(s => {
       const sc = activeScene(s);
       if (id === null) return { selectedId: null };
@@ -939,7 +953,8 @@ export const useStore = create<CanvasState>()((set, get) => {
         selectedId: id,
         scenes: s.scenes.map(x => (x.id === sc.id ? { ...x, boxes } : x))
       };
-    }),
+    });
+  },
 
   setHoveredId: (id) => set(s => (s.hoveredId === id ? {} : { hoveredId: id })),
 
@@ -1039,6 +1054,35 @@ export const useStore = create<CanvasState>()((set, get) => {
         hoveredId: s2.hoveredId === id ? null : s2.hoveredId,
         pendingBoxId: s2.pendingBoxId === id ? null : s2.pendingBoxId,
         pendingIsNew: s2.pendingBoxId === id ? false : s2.pendingIsNew,
+        ...histFlagsOf(sc2.id)
+      };
+    });
+    scheduleSave();
+  },
+
+  duplicateBox: (id) => {
+    const s = get();
+    const sc = activeScene(s);
+    const src = sc.boxes.find(b => b.id === id);
+    if (!src) return;
+    histOf(sc.id).record(docSnap(sc), "op:" + ++opSeq);
+    const OFF = 16;
+    const topZ = sc.boxes.reduce((m, b) => Math.max(m, b.z), 0);
+    const copy: Box = {
+      ...src,
+      id: s.nextId,
+      xmin: src.xmin + OFF,
+      xmax: src.xmax + OFF,
+      ymin: src.ymin + OFF,
+      ymax: src.ymax + OFF,
+      z: topZ + 1
+    };
+    set(s2 => {
+      const sc2 = activeScene(s2);
+      return {
+        scenes: s2.scenes.map(x => (x.id === sc2.id ? { ...x, boxes: [...x.boxes, copy] } : x)),
+        nextId: s2.nextId + 1,
+        selectedId: copy.id,
         ...histFlagsOf(sc2.id)
       };
     });

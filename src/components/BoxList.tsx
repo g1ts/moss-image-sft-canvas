@@ -14,6 +14,7 @@ export default function BoxList() {
   const select = useStore(s => s.select);
   const setHoveredId = useStore(s => s.setHoveredId);
   const deleteBox = useStore(s => s.deleteBox);
+  const duplicateBox = useStore(s => s.duplicateBox);
   const updateBox = useStore(s => s.updateBox);
   const openBoxEditor = useStore(s => s.openBoxEditor);
   const clearAll = useStore(s => s.clearAll);
@@ -98,6 +99,7 @@ export default function BoxList() {
               onSelect={() => select(b.id)}
               onEdit={() => openBoxEditor(b.id)}
               onDelete={() => deleteBox(b.id)}
+              onDuplicate={() => duplicateBox(b.id)}
               onToggleHidden={() => updateBox(b.id, { hidden: !b.hidden })}
               onToggleLocked={() => updateBox(b.id, { locked: !b.locked })}
               onDragStart={e => {
@@ -138,6 +140,7 @@ function BoxItem({
   onSelect,
   onEdit,
   onDelete,
+  onDuplicate,
   onToggleHidden,
   onToggleLocked,
   onDragStart,
@@ -154,6 +157,7 @@ function BoxItem({
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   onToggleHidden: () => void;
   onToggleLocked: () => void;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
@@ -212,6 +216,31 @@ function BoxItem({
         onDoubleClick={e => e.stopPropagation()}
       >
         <LockIcon locked={box.locked} />
+      </button>
+      <button
+        className="dup"
+        title="Duplicate box (Ctrl+D)"
+        aria-label="Duplicate box"
+        onClick={e => {
+          e.stopPropagation();
+          onDuplicate();
+        }}
+        onDoubleClick={e => e.stopPropagation()}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
       </button>
       <button
         className="del"
