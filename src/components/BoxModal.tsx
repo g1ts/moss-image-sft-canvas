@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 import { PALETTE, boxSize, boxText } from "../lib/geometry";
 import { DEFAULT_LABELS, buildLabelOptions } from "../lib/valueHistory";
 import LabelInput from "./LabelInput";
@@ -26,8 +26,9 @@ export default function BoxModal({
   boxId: number | null;
   onClose: () => void;
 }) {
-  const box = useStore(s => (boxId === null ? undefined : s.boxes.find(b => b.id === boxId)));
-  const boxes = useStore(s => s.boxes);
+  const scene = useStore(activeScene);
+  const box = boxId === null ? undefined : scene.boxes.find(b => b.id === boxId);
+  const boxes = scene.boxes;
   const labelHistory = useStore(s => s.labelHistory);
   const isNew = useStore(s => s.pendingIsNew);
   const updateBox = useStore(s => s.updateBox);

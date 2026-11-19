@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 import GearIcon from "./GearIcon";
 import {
   alignCandidates,
@@ -29,15 +29,16 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const dragRef = useRef<Drag | null>(null);
   const guidesRef = useRef<AlignGuide[] | null>(null);
 
-  const boxes = useStore(s => s.boxes);
+  const scene = useStore(activeScene);
+  const boxes = scene.boxes;
   const selectedId = useStore(s => s.selectedId);
   const hoveredId = useStore(s => s.hoveredId);
   const setHoveredId = useStore(s => s.setHoveredId);
   const bgImage = useStore(s => s.bgImage);
   const genBusy = useStore(s => s.genBusy);
   const genPreviewFrame = useStore(s => s.genPreviewFrame);
-  const width = useStore(s => s.width);
-  const height = useStore(s => s.height);
+  const width = scene.width;
+  const height = scene.height;
   const jsonMode = useStore(s => s.jsonMode);
   const showGrid = useStore(s => s.showGrid);
   const gridSize = useStore(s => s.gridSize);
@@ -48,13 +49,14 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     const ctx = cv.getContext("2d");
     if (!ctx) return;
     const st = useStore.getState();
-    const W = st.width, H = st.height;
+    const sc = activeScene(st);
+    const W = sc.width, H = sc.height;
     ctx.setTransform(renderScaleRef.current, 0, 0, renderScaleRef.current, 0, 0);
     ctx.clearRect(-W / 2, -H / 2, W, H);
     ctx.translate(W / 2, H / 2);
     const frame = st.genBusy ? st.genPreviewFrame : null;
     const bg = frame ? frame.img : st.bgImage;
-    if (bg) {
+    if (bg && bg.complete && bg.naturalWidth > 0) {
       ctx.drawImage(bg, -W / 2, -H / 2, W, H);
     } else {
       ctx.fillStyle = "#191d23";
@@ -62,13 +64,13 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     }
     if (st.showGrid) drawGrid(ctx, W, H, st.gridSize);
     if (!st.jsonMode) return;
-    const ordered = [...st.boxes].sort((a, b) => a.z - b.z);
+    const ordered = [...sc.boxes].sort((a, b) => a.z - b.z);
     const hovId = st.hoveredId;
     for (const b of ordered) drawBox(ctx, b, b.id === st.selectedId, false, H, b.id === hovId);
     const drag = dragRef.current;
     if (drag && drag.mode === "draw") drawBox(ctx, drag.box, true, true, H, false);
     drawGuides(ctx, W, H, guidesRef.current);
-    const sel = st.boxes.find(b => b.id === st.selectedId);
+    const sel = sc.boxes.find(b => b.id === st.selectedId);
     if (sel && !sel.hidden && !sel.locked) drawHandles(ctx, cv, sel);
   }, []);
 
@@ -80,9 +82,10 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     }
     const cv = canvasRef.current;
     if (!cv) return;
-    const threshold = alignThreshold(cv, st.width);
-    const others = st.boxes.filter(b => b.id !== box.id);
-    const res = computeAlign(box, others, st.width, st.height, threshold);
+    const sc = activeScene(st);
+    const threshold = alignThreshold(cv, sc.width);
+    const others = sc.boxes.filter(b => b.id !== box.id);
+    const res = computeAlign(box, others, sc.width, sc.height, threshold);
     guidesRef.current = res.guides;
     if (res.dx !== 0) {
       box.xmin += res.dx;
@@ -105,9 +108,10 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       guidesRef.current = null;
       return;
     }
-    const threshold = alignThreshold(cv, st.width);
-    const others = st.boxes.filter(b => b.id !== box.id);
-    const { candX, candY } = alignCandidates(others, st.width, st.height);
+    const sc = activeScene(st);
+    const threshold = alignThreshold(cv, sc.width);
+    const others = sc.boxes.filter(b => b.id !== box.id);
+    const { candX, candY } = alignCandidates(others, sc.width, sc.height);
     const guides: AlignGuide[] = [];
     const tryEdge = (axis: "x" | "y", key: "xmin" | "xmax" | "ymin" | "ymax") => {
       const at = snapToCandidate(box[key], axis === "x" ? candX : candY, threshold);
@@ -127,14 +131,15 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     const cv = canvasRef.current, wrap = wrapRef.current;
     if (!cv || !wrap) return;
     const st = useStore.getState();
+    const sc = activeScene(st);
     const availW = Math.max(50, wrap.clientWidth - 24);
     const availH = Math.max(50, wrap.clientHeight - 24);
-    const scale = Math.min(availW / st.width, availH / st.height, 2);
-    cv.style.width = Math.round(st.width * scale) + "px";
-    cv.style.height = Math.round(st.height * scale) + "px";
+    const scale = Math.min(availW / sc.width, availH / sc.height, 2);
+    cv.style.width = Math.round(sc.width * scale) + "px";
+    cv.style.height = Math.round(sc.height * scale) + "px";
     const dpr = window.devicePixelRatio || 1;
-    cv.width = Math.max(1, Math.round(st.width * scale * dpr));
-    cv.height = Math.max(1, Math.round(st.height * scale * dpr));
+    cv.width = Math.max(1, Math.round(sc.width * scale * dpr));
+    cv.height = Math.max(1, Math.round(sc.height * scale * dpr));
     renderScaleRef.current = scale * dpr;
     draw();
   }, [draw]);
@@ -142,20 +147,20 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const toLogical = useCallback((clientX: number, clientY: number): Pt => {
     const cv = canvasRef.current!;
     const r = cv.getBoundingClientRect();
-    const st = useStore.getState();
+    const sc = activeScene(useStore.getState());
     return {
-      x: (clientX - r.left) * (st.width / r.width) - st.width / 2,
-      y: (clientY - r.top) * (st.height / r.height) - st.height / 2
+      x: (clientX - r.left) * (sc.width / r.width) - sc.width / 2,
+      y: (clientY - r.top) * (sc.height / r.height) - sc.height / 2
     };
   }, []);
 
   const toScreen = useCallback((lx: number, ly: number): Pt => {
     const cv = canvasRef.current!;
     const r = cv.getBoundingClientRect();
-    const st = useStore.getState();
+    const sc = activeScene(useStore.getState());
     return {
-      x: r.left + (lx + st.width / 2) * (r.width / st.width),
-      y: r.top + (ly + st.height / 2) * (r.height / st.height)
+      x: r.left + (lx + sc.width / 2) * (r.width / sc.width),
+      y: r.top + (ly + sc.height / 2) * (r.height / sc.height)
     };
   }, []);
 
@@ -171,8 +176,8 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   );
 
   const hitBox = useCallback((p: Pt): Box | null => {
-    const st = useStore.getState();
-    const ordered = [...st.boxes].sort((a, b) => b.z - a.z);
+    const sc = activeScene(useStore.getState());
+    const ordered = [...sc.boxes].sort((a, b) => b.z - a.z);
     for (const b of ordered) {
       if (b.hidden || b.locked) continue;
       const n = norm(b);
@@ -186,12 +191,13 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       const cv = canvasRef.current;
       if (!cv) return;
       const st = useStore.getState();
+      const sc = activeScene(st);
       if (!st.jsonMode) {
         cv.style.cursor = "default";
         setHoveredId(null);
         return;
       }
-      const sel = st.boxes.find(b => b.id === st.selectedId);
+      const sel = sc.boxes.find(b => b.id === st.selectedId);
       if (sel && !sel.hidden && !sel.locked) {
         const h = hitHandle(sel, clientX, clientY);
         if (h) {
@@ -351,7 +357,8 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     if (!st.jsonMode) return;
     const p = toLogical(e.clientX, e.clientY);
     setHoveredId(null);
-    const sel = st.boxes.find(b => b.id === st.selectedId);
+    const sc = activeScene(st);
+    const sel = sc.boxes.find(b => b.id === st.selectedId);
     if (sel && !sel.hidden && !sel.locked) {
       const h = hitHandle(sel, e.clientX, e.clientY);
       if (h) {
@@ -478,8 +485,8 @@ function drawBox(ctx: CanvasRenderingContext2D, b: Box, selected: boolean, previ
 
 function drawHandles(ctx: CanvasRenderingContext2D, cv: HTMLCanvasElement, b: Box) {
   const r = cv.getBoundingClientRect();
-  const st = useStore.getState();
-  const scale = r.width / st.width;
+  const sc = activeScene(useStore.getState());
+  const scale = r.width / sc.width;
   const s = Math.max(6, 8 / scale);
   ctx.lineWidth = 1.5;
   for (const [, hx, hy] of handlePoints(b)) {

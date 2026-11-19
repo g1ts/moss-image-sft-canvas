@@ -19,6 +19,24 @@ export interface LayoutSummary {
   caption: string;
 }
 
+// A scene is one canvas document: its own size, boxes and prompt data.
+// All fields are JSON-serializable so the whole set can be persisted and exported.
+export interface Scene {
+  id: number;
+  name: string;
+  width: number;
+  height: number;
+  boxes: Box[];
+  metaText: string;
+  canvasType: string;
+  sceneCaption: string;
+  negPrompt: string;
+  bgDataUrl: string | null;
+  uploadedBgDataUrl: string | null;
+  bgInfo: string;
+  uploadedBgInfo: string;
+}
+
 export interface GenItemLora {
   path: string;
   mult: number;

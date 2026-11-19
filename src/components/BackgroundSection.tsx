@@ -1,27 +1,36 @@
 import { useRef, type ChangeEvent } from "react";
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 
 export default function BackgroundSection() {
-  const bgInfo = useStore(s => s.bgInfo);
+  const bgInfo = useStore(activeScene).bgInfo;
   const setUploadedBg = useStore(s => s.setUploadedBg);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!f) return;
-    const img = new Image();
-    img.onload = () => {
-      const st = useStore.getState();
-      setUploadedBg(
-        img,
-        img.naturalWidth + "×" + img.naturalHeight + " → " + st.width + "×" + st.height
-      );
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const img = new Image();
+      img.onload = () => {
+        const sc = activeScene(useStore.getState());
+        setUploadedBg(
+          img,
+          img.naturalWidth + "×" + img.naturalHeight + " → " + sc.width + "×" + sc.height,
+          dataUrl
+        );
+      };
+      img.onerror = () => setUploadedBg(null, "", null);
+      img.src = dataUrl;
     };
-    img.src = URL.createObjectURL(f);
+    reader.onerror = () => setUploadedBg(null, "", null);
+    reader.readAsDataURL(f);
   };
 
   const onClear = () => {
-    setUploadedBg(null, "");
+    setUploadedBg(null, "", null);
     if (fileRef.current) fileRef.current.value = "";
   };
 

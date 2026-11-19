@@ -144,14 +144,16 @@ export function handlePoints(b: Box): HandlePoint[] {
   ];
 }
 
-export function toLayoutText(summary: LayoutSummary, boxes: Box[]): string {
+// all = include hidden boxes and carry the hidden/locked flags (project files);
+// the default filters hidden boxes out (model-ready layout JSON)
+export function layoutObject(summary: LayoutSummary, boxes: Box[], all = false): Record<string, unknown> {
   const summaryObj: Record<string, unknown> = {};
   if (summary.meta.length > 0) summaryObj.meta = summary.meta;
   summaryObj.canvas = summary.canvas;
   summaryObj.caption = summary.caption;
-  return JSON.stringify({
+  return {
     summary: summaryObj,
-    items: boxes.filter(b => !b.hidden).map(b => {
+    items: (all ? boxes : boxes.filter(b => !b.hidden)).map(b => {
       const n = norm(b);
       const item: Record<string, unknown> = { label: b.label };
       if (b.caption) item.caption = b.caption;
@@ -162,16 +164,24 @@ export function toLayoutText(summary: LayoutSummary, boxes: Box[]): string {
         Math.round(n.y2),
         Math.round(n.x2)
       ];
+      if (all) {
+        if (b.hidden) item.hidden = true;
+        if (b.locked) item.locked = true;
+      }
       return item;
     }),
     bbox_coord_space: "abs_centralized",
     bbox_format: "yxyx"
-  }, null, 2);
+  };
+}
+
+export function toLayoutText(summary: LayoutSummary, boxes: Box[]): string {
+  return JSON.stringify(layoutObject(summary, boxes), null, 2);
 }
 
 export interface ParsedLayout {
   summary: LayoutSummary | null;
-  items: { bbox: number[]; label: string; caption: string; text: string }[];
+  items: { bbox: number[]; label: string; caption: string; text: string; hidden: boolean; locked: boolean }[];
 }
 
 export function parseLayout(data: unknown): ParsedLayout {
@@ -198,7 +208,15 @@ export function parseLayout(data: unknown): ParsedLayout {
   const items: ParsedLayout["items"] = [];
   for (let i = 0; i < obj.items.length; i++) {
     const it = obj.items[i] as
-      | { bbox?: unknown; box_2d?: unknown; label?: unknown; caption?: unknown; text?: unknown }
+      | {
+          bbox?: unknown;
+          box_2d?: unknown;
+          label?: unknown;
+          caption?: unknown;
+          text?: unknown;
+          hidden?: unknown;
+          locked?: unknown;
+        }
       | null;
     if (!it || typeof it !== "object") {
       throw new Error("items[" + i + "]: expected an object");
@@ -211,7 +229,9 @@ export function parseLayout(data: unknown): ParsedLayout {
       bbox: raw as number[],
       label: typeof it.label === "string" ? it.label : "box " + (i + 1),
       caption: typeof it.caption === "string" ? it.caption : "",
-      text: typeof it.text === "string" ? it.text : ""
+      text: typeof it.text === "string" ? it.text : "",
+      hidden: it.hidden === true,
+      locked: it.locked === true
     });
   }
   let summary: LayoutSummary | null = null;

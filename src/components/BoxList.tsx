@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from "react";
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 import EyeIcon from "./EyeIcon";
 import LockIcon from "./LockIcon";
 import TrashIcon from "./TrashIcon";
@@ -8,7 +8,7 @@ import type { Box } from "../types";
 type DropTarget = { id: number; pos: "above" | "below" } | "end" | null;
 
 export default function BoxList() {
-  const boxes = useStore(s => s.boxes);
+  const boxes = useStore(activeScene).boxes;
   const selectedId = useStore(s => s.selectedId);
   const hoveredId = useStore(s => s.hoveredId);
   const select = useStore(s => s.select);

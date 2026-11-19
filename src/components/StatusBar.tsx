@@ -1,10 +1,11 @@
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 
 export default function StatusBar() {
   const cursor = useStore(s => s.cursor);
   const action = useStore(s => s.action);
-  const width = useStore(s => s.width);
-  const height = useStore(s => s.height);
+  const scene = useStore(activeScene);
+  const width = scene.width;
+  const height = scene.height;
 
   return (
     <div id="statusBar">

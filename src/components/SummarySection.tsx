@@ -1,8 +1,9 @@
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 
 export default function SummarySection() {
-  const sceneCaption = useStore(s => s.sceneCaption);
-  const negPrompt = useStore(s => s.negPrompt);
+  const scene = useStore(activeScene);
+  const sceneCaption = scene.sceneCaption;
+  const negPrompt = scene.negPrompt;
   const jsonMode = useStore(s => s.jsonMode);
   const setSceneCaption = useStore(s => s.setSceneCaption);
   const setNegPrompt = useStore(s => s.setNegPrompt);

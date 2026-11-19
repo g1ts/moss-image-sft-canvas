@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 import TrashIcon from "./TrashIcon";
 
 function optionsWithCurrent(options: string[], current: string): string[] {
@@ -9,8 +9,9 @@ function optionsWithCurrent(options: string[], current: string): string[] {
 }
 
 export default function GenerationSection({ open }: { open: boolean }) {
-  const cw = useStore(s => s.width);
-  const ch = useStore(s => s.height);
+  const scene = useStore(activeScene);
+  const cw = scene.width;
+  const ch = scene.height;
   const genUrl = useStore(s => s.genUrl);
   const genW = useStore(s => s.genW);
   const genH = useStore(s => s.genH);

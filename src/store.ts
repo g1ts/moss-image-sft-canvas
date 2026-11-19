@@ -1,7 +1,8 @@
 import { create } from "zustand";
-import type { Box, GalleryItem, GenItemParams, LayoutSummary } from "./types";
+import type { Box, GalleryItem, GenItemParams, LayoutSummary, Scene } from "./types";
 import { PALETTE, clampInt, toLayoutText, type ParsedLayout } from "./lib/geometry";
 import { createHistory, type History } from "./lib/undoHistory";
+import type { ParsedProjectScene } from "./lib/scenes";
 import {
   LABEL_HISTORY_KEY,
   META_HISTORY_KEY,
@@ -60,7 +61,14 @@ export interface GenParams {
 }
 
 const LS_GEN_URL = "moss-image-sft-canvas.sdcpp.url";
-const DEFAULT_GEN_URL = "";
+
+function readSavedUrl(): string {
+  try {
+    return localStorage.getItem(LS_GEN_URL) || "";
+  } catch {
+    return "";
+  }
+}
 
 const LS_GEN_AUTO_BG = "moss-image-sft-canvas:genAutoBg";
 
@@ -111,16 +119,10 @@ function saveLivePreviewMode(mode: string): void {
   }
 }
 
+// read-only: the canvas size is now stored per scene; this legacy key is
+// migrated into the size of the first scene on a very first start
 const LS_CANVAS_SIZE = "moss-image-sft-canvas:canvasSize";
 const DEFAULT_CANVAS_SIZE = { w: 512, h: 512 };
-
-function readSavedUrl(): string {
-  try {
-    return localStorage.getItem(LS_GEN_URL) || DEFAULT_GEN_URL;
-  } catch {
-    return DEFAULT_GEN_URL;
-  }
-}
 
 function readSavedSize(): { w: number; h: number } {
   try {
@@ -143,14 +145,6 @@ function readSavedSize(): { w: number; h: number } {
     /* ignore */
   }
   return DEFAULT_CANVAS_SIZE;
-}
-
-function saveCanvasSize(w: number, h: number): void {
-  try {
-    localStorage.setItem(LS_CANVAS_SIZE, JSON.stringify({ w, h }));
-  } catch {
-    /* ignore */
-  }
 }
 
 const LS_GRID = "moss-image-sft-canvas:showGrid";
@@ -259,6 +253,167 @@ function saveGalleryHidden(v: boolean): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Scene set persistence
+
+const LS_SCENES = "moss-image-sft-canvas:scenes";
+
+interface SavedScenes {
+  scenes: Scene[];
+  activeSceneId: number;
+  nextId: number;
+  colorIndex: number;
+}
+
+function isBox(b: unknown): b is Box {
+  if (!b || typeof b !== "object") return false;
+  const o = b as Record<string, unknown>;
+  return (
+    typeof o.id === "number" &&
+    typeof o.label === "string" &&
+    typeof o.caption === "string" &&
+    typeof o.text === "string" &&
+    typeof o.xmin === "number" &&
+    typeof o.xmax === "number" &&
+    typeof o.ymin === "number" &&
+    typeof o.ymax === "number" &&
+    typeof o.color === "string" &&
+    typeof o.z === "number" &&
+    typeof o.hidden === "boolean" &&
+    typeof o.locked === "boolean"
+  );
+}
+
+function isScene(sc: unknown): sc is Scene {
+  if (!sc || typeof sc !== "object") return false;
+  const o = sc as Record<string, unknown>;
+  return (
+    typeof o.id === "number" &&
+    typeof o.name === "string" &&
+    typeof o.width === "number" &&
+    typeof o.height === "number" &&
+    isFinite(o.width as number) &&
+    isFinite(o.height as number) &&
+    (o.width as number) > 0 &&
+    (o.height as number) > 0 &&
+    Array.isArray(o.boxes) &&
+    (o.boxes as unknown[]).every(isBox) &&
+    typeof o.metaText === "string" &&
+    typeof o.canvasType === "string" &&
+    typeof o.sceneCaption === "string" &&
+    typeof o.negPrompt === "string" &&
+    (o.bgDataUrl === null || typeof o.bgDataUrl === "string") &&
+    (o.uploadedBgDataUrl === null || typeof o.uploadedBgDataUrl === "string") &&
+    typeof o.bgInfo === "string" &&
+    typeof o.uploadedBgInfo === "string"
+  );
+}
+
+function readSavedScenes(): SavedScenes | null {
+  try {
+    const raw = localStorage.getItem(LS_SCENES);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as
+      | { scenes?: unknown; activeSceneId?: unknown; nextId?: unknown; colorIndex?: unknown }
+      | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!Array.isArray(parsed.scenes) || !parsed.scenes.length || !(parsed.scenes as unknown[]).every(isScene)) {
+      return null;
+    }
+    const scenes = parsed.scenes as Scene[];
+    const activeSceneId =
+      typeof parsed.activeSceneId === "number" && scenes.some(sc => sc.id === parsed.activeSceneId)
+        ? parsed.activeSceneId
+        : scenes[0].id;
+    let nextId = 1;
+    for (const sc of scenes) for (const b of sc.boxes) nextId = Math.max(nextId, b.id + 1);
+    return {
+      scenes,
+      activeSceneId,
+      nextId,
+      colorIndex: typeof parsed.colorIndex === "number" && Number.isFinite(parsed.colorIndex) ? parsed.colorIndex : 0
+    };
+  } catch {
+    return null;
+  }
+}
+
+function makeScene(id: number, name: string, w: number, h: number): Scene {
+  return {
+    id,
+    name,
+    width: w,
+    height: h,
+    boxes: [],
+    metaText: "",
+    canvasType: "single",
+    sceneCaption: "",
+    negPrompt: "",
+    bgDataUrl: null,
+    uploadedBgDataUrl: null,
+    bgInfo: "",
+    uploadedBgInfo: ""
+  };
+}
+
+let saveTimer: number | null = null;
+
+function persistScenes(): void {
+  const s = useStore.getState();
+  const payload: SavedScenes = {
+    scenes: s.scenes,
+    activeSceneId: s.activeSceneId,
+    nextId: s.nextId,
+    colorIndex: s.colorIndex
+  };
+  try {
+    localStorage.setItem(LS_SCENES, JSON.stringify(payload));
+  } catch {
+    // the quota may be exceeded by the background data URLs — retry without them
+    try {
+      localStorage.setItem(
+        LS_SCENES,
+        JSON.stringify({
+          ...payload,
+          scenes: payload.scenes.map(sc => ({
+            ...sc,
+            bgDataUrl: null,
+            uploadedBgDataUrl: null,
+            bgInfo: "",
+            uploadedBgInfo: ""
+          }))
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function scheduleSave(): void {
+  if (saveTimer !== null) return;
+  saveTimer = window.setTimeout(() => {
+    saveTimer = null;
+    persistScenes();
+  }, 500);
+}
+
+function flushSave(): void {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  persistScenes();
+}
+
+window.addEventListener("beforeunload", flushSave);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushSave();
+});
+
+// ---------------------------------------------------------------------------
+// The store
+
 let genTimer: number | null = null;
 let genJobId: string | number | null = null;
 let genBaseUrl: string = "";
@@ -268,9 +423,8 @@ let loraRowId = 1;
 let catalogReq = 0;
 
 interface CanvasState extends GenParams {
-  width: number;
-  height: number;
-  boxes: Box[];
+  scenes: Scene[];
+  activeSceneId: number;
   selectedId: number | null;
   hoveredId: number | null;
   pendingBoxId: number | null;
@@ -278,19 +432,12 @@ interface CanvasState extends GenParams {
   nextId: number;
   colorIndex: number;
   bgImage: HTMLImageElement | null;
-  bgInfo: string;
-  uploadedBg: HTMLImageElement | null;
-  uploadedBgInfo: string;
   gallery: GalleryItem[];
   genBusy: boolean;
   genStatus: GenStatus;
   genPreviewFrame: GenPreviewFrame | null;
   cursor: { x: number; y: number } | null;
   action: string;
-  metaText: string;
-  canvasType: string;
-  sceneCaption: string;
-  negPrompt: string;
   jsonMode: boolean;
   showGrid: boolean;
   gridSize: number;
@@ -315,8 +462,15 @@ interface CanvasState extends GenParams {
   endChange: () => void;
   cancelChange: () => void;
 
+  addScene: () => void;
+  duplicateScene: (id: number) => void;
+  renameScene: (id: number, name: string) => void;
+  deleteScene: (id: number) => void;
+  setActiveScene: (id: number) => void;
+  importProject: (parsed: ParsedProjectScene[]) => void;
+
   applySize: (w: number, h: number) => void;
-  setUploadedBg: (img: HTMLImageElement | null, info: string) => void;
+  setUploadedBg: (img: HTMLImageElement | null, info: string, dataUrl: string | null) => void;
   select: (id: number | null) => void;
   setHoveredId: (id: number | null) => void;
   setPendingBoxId: (id: number | null) => void;
@@ -377,7 +531,11 @@ interface CanvasState extends GenParams {
   useAsBg: (id: number) => void;
 }
 
-// Undo/redo operates on the internal document state (not the exported JSON):
+export function activeScene(s: { scenes: Scene[]; activeSceneId: number }): Scene {
+  return s.scenes.find(sc => sc.id === s.activeSceneId) ?? s.scenes[0];
+}
+
+// Undo/redo is kept per scene (not the exported JSON):
 // every Box keeps its hidden/locked flags, so "hidden" and "deleted" stay distinct steps.
 //
 // Change sessions (beginChange/endChange) cover both mouse drags (mousedown/mouseup)
@@ -395,13 +553,13 @@ interface DocSnap {
 const UNDO_LIMIT = 100;
 const UNDO_COALESCE_MS = 500;
 
-function docSnap(s: CanvasState): DocSnap {
+function docSnap(sc: Scene): DocSnap {
   return {
-    boxes: s.boxes.map(b => ({ ...b })),
-    metaText: s.metaText,
-    canvasType: s.canvasType,
-    sceneCaption: s.sceneCaption,
-    negPrompt: s.negPrompt
+    boxes: sc.boxes.map(b => ({ ...b })),
+    metaText: sc.metaText,
+    canvasType: sc.canvasType,
+    sceneCaption: sc.sceneCaption,
+    negPrompt: sc.negPrompt
   };
 }
 
@@ -415,16 +573,28 @@ function docFingerprint(s: DocSnap): string {
   return boxes + "#" + s.metaText + "#" + s.canvasType + "#" + s.sceneCaption + "#" + s.negPrompt;
 }
 
-const history: History<DocSnap> = createHistory<DocSnap>({
-  limit: UNDO_LIMIT,
-  coalesceMs: UNDO_COALESCE_MS,
-  fingerprint: docFingerprint
-});
+const sceneHistories = new Map<number, History<DocSnap>>();
+
+function histOf(id: number): History<DocSnap> {
+  let h = sceneHistories.get(id);
+  if (!h) {
+    h = createHistory<DocSnap>({
+      limit: UNDO_LIMIT,
+      coalesceMs: UNDO_COALESCE_MS,
+      fingerprint: docFingerprint
+    });
+    sceneHistories.set(id, h);
+  }
+  return h;
+}
 
 // keys of discrete operations must be unique (undo of a delete inside the coalesce window of a new delete)
 let opSeq = 0;
 
-const histFlags = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
+const histFlagsOf = (id: number) => {
+  const h = histOf(id);
+  return { canUndo: h.canUndo, canRedo: h.canRedo };
+};
 
 export function summaryFromState(s: { metaText: string; canvasType: string; sceneCaption: string }): LayoutSummary {
   return {
@@ -434,44 +604,82 @@ export function summaryFromState(s: { metaText: string; canvasType: string; scen
   };
 }
 
-const savedSize = readSavedSize();
+// A background image element for a scene data URL; reuses the current element when it matches.
+// Returns null while a fresh image is still decoding; onload then sets it via setState,
+// which triggers a redraw (state never holds an undecoded element)
+function bgImageFor(url: string, sceneId: number): HTMLImageElement | null {
+  const cur = useStore.getState().bgImage;
+  if (cur && cur.src === url && cur.complete && cur.naturalWidth > 0) return cur;
+  const img = new Image();
+  img.onload = () => {
+    const st = useStore.getState();
+    const act = activeScene(st);
+    if (act.id === sceneId && act.bgDataUrl === url && st.bgImage !== img) {
+      useStore.setState({ bgImage: img });
+    }
+  };
+  img.src = url;
+  return img.complete && img.naturalWidth > 0 ? img : null;
+}
+
+const savedScenes = readSavedScenes();
+const legacySize = readSavedSize();
+const initialScenes = savedScenes ? savedScenes.scenes : [makeScene(1, "Scene 1", legacySize.w, legacySize.h)];
 
 export const useStore = create<CanvasState>()((set, get) => {
-  // restore a document snapshot, dropping selection refs that no longer exist
+  // update fields of the active scene; extra = additional global state to set
+  const updateActive = (patch: Partial<Scene> | ((sc: Scene) => Partial<Scene>), extra: Partial<CanvasState> = {}) => {
+    set(s => {
+      const sc = activeScene(s);
+      const p = typeof patch === "function" ? patch(sc) : patch;
+      return {
+        scenes: s.scenes.map(x => (x.id === sc.id ? { ...x, ...p } : x)),
+        ...extra
+      };
+    });
+    scheduleSave();
+  };
+
+  // commit a pending text-edit session of the active scene (it becomes stale on scene ops)
+  const commitPending = () => {
+    const sc = activeScene(get());
+    histOf(sc.id).end(docSnap(sc));
+  };
+
   const setDoc = (snap: DocSnap) => {
-    history.cancel(); // a pending text-edit session is stale once the document is replaced
     const s = get();
+    const sc = activeScene(s);
+    histOf(sc.id).cancel(); // a pending text-edit session is stale once the document is replaced
     const ids = new Set(snap.boxes.map(b => b.id));
     const keep = (id: number | null) => (id !== null && !ids.has(id) ? null : id);
-    const pendingBoxId = keep(s.pendingBoxId);
-    set({
-      boxes: snap.boxes.map(b => ({ ...b })),
-      metaText: snap.metaText,
-      canvasType: snap.canvasType,
-      sceneCaption: snap.sceneCaption,
-      negPrompt: snap.negPrompt,
-      selectedId: keep(s.selectedId),
-      hoveredId: keep(s.hoveredId),
-      pendingBoxId,
-      pendingIsNew: pendingBoxId !== null ? s.pendingIsNew : false,
-      ...histFlags()
-    });
+    updateActive(
+      {
+        boxes: snap.boxes.map(b => ({ ...b })),
+        metaText: snap.metaText,
+        canvasType: snap.canvasType,
+        sceneCaption: snap.sceneCaption,
+        negPrompt: snap.negPrompt
+      },
+      {
+        selectedId: keep(s.selectedId),
+        hoveredId: keep(s.hoveredId),
+        pendingBoxId: keep(s.pendingBoxId),
+        pendingIsNew: keep(s.pendingBoxId) ? s.pendingIsNew : false,
+        ...histFlagsOf(sc.id)
+      }
+    );
   };
 
   return ({
-  width: savedSize.w,
-  height: savedSize.h,
-  boxes: [],
+  scenes: initialScenes,
+  activeSceneId: savedScenes ? savedScenes.activeSceneId : initialScenes[0].id,
   selectedId: null,
   hoveredId: null,
   pendingBoxId: null,
   pendingIsNew: false,
-  nextId: 1,
-  colorIndex: 0,
+  nextId: savedScenes ? savedScenes.nextId : 1,
+  colorIndex: savedScenes ? savedScenes.colorIndex : 0,
   bgImage: null,
-  bgInfo: "",
-  uploadedBg: null,
-  uploadedBgInfo: "",
   gallery: [],
   genBusy: false,
   genStatus: { msg: "", isError: false },
@@ -499,10 +707,6 @@ export const useStore = create<CanvasState>()((set, get) => {
   genAutoBg: readSavedAutoBg(),
   cursor: null,
   action: "",
-  metaText: "",
-  canvasType: "single",
-  sceneCaption: "",
-  negPrompt: "",
   jsonMode: true,
   showGrid: readSavedGrid(),
   gridSize: readSavedGridSize(),
@@ -515,47 +719,226 @@ export const useStore = create<CanvasState>()((set, get) => {
   canRedo: false,
 
   undo: () => {
-    const snap = history.undo(docSnap(get()));
+    const sc = activeScene(get());
+    const snap = histOf(sc.id).undo(docSnap(sc));
     if (!snap) return;
     setDoc(snap);
   },
 
   redo: () => {
-    const snap = history.redo(docSnap(get()));
+    const sc = activeScene(get());
+    const snap = histOf(sc.id).redo(docSnap(sc));
     if (!snap) return;
     setDoc(snap);
   },
 
   beginChange: () => {
-    history.begin(docSnap(get()));
+    const sc = activeScene(get());
+    histOf(sc.id).begin(docSnap(sc));
   },
 
   endChange: () => {
-    if (history.end(docSnap(get()))) set(histFlags());
+    const sc = activeScene(get());
+    if (histOf(sc.id).end(docSnap(sc))) {
+      set(histFlagsOf(sc.id));
+      scheduleSave();
+    }
   },
 
   cancelChange: () => {
-    history.cancel();
+    const sc = activeScene(get());
+    histOf(sc.id).cancel();
+  },
+
+  addScene: () => {
+    const s = get();
+    const sc = activeScene(s);
+    const id = Math.max(0, ...s.scenes.map(x => x.id)) + 1;
+    commitPending();
+    const scene = makeScene(id, "Scene " + id, sc.width, sc.height);
+    set({
+      scenes: [...s.scenes, scene],
+      activeSceneId: id,
+      selectedId: null,
+      hoveredId: null,
+      pendingBoxId: null,
+      pendingIsNew: false,
+      bgImage: null,
+      canUndo: false,
+      canRedo: false
+    });
+    scheduleSave();
+  },
+
+  duplicateScene: (id) => {
+    const s = get();
+    const src = s.scenes.find(x => x.id === id);
+    if (!src) return;
+    commitPending();
+    const newId = Math.max(0, ...s.scenes.map(x => x.id)) + 1;
+    let nid = s.nextId;
+    const boxes = src.boxes.map(b => ({ ...b, id: nid++ }));
+    const scene: Scene = { ...src, id: newId, name: src.name + " copy", boxes };
+    const idx = s.scenes.findIndex(x => x.id === id);
+    const scenes = s.scenes.slice();
+    scenes.splice(idx + 1, 0, scene);
+    set({
+      scenes,
+      nextId: nid,
+      activeSceneId: newId,
+      selectedId: null,
+      hoveredId: null,
+      pendingBoxId: null,
+      pendingIsNew: false,
+      bgImage: scene.bgDataUrl ? bgImageFor(scene.bgDataUrl, newId) : null,
+      canUndo: false,
+      canRedo: false
+    });
+    scheduleSave();
+  },
+
+  renameScene: (id, name) => {
+    const n = name.trim();
+    if (!n) return;
+    set(s => ({ scenes: s.scenes.map(x => (x.id === id ? { ...x, name: n } : x)) }));
+    scheduleSave();
+  },
+
+  deleteScene: (id) => {
+    const s = get();
+    if (s.scenes.length <= 1) return;
+    const idx = s.scenes.findIndex(x => x.id === id);
+    if (idx === -1) return;
+    commitPending();
+    const scenes = s.scenes.filter(x => x.id !== id);
+    sceneHistories.delete(id);
+    const switching = s.activeSceneId === id;
+    const next = scenes[Math.min(idx, scenes.length - 1)];
+    set({
+      scenes,
+      activeSceneId: switching ? next.id : s.activeSceneId,
+      selectedId: null,
+      hoveredId: null,
+      pendingBoxId: null,
+      pendingIsNew: false,
+      bgImage: switching ? (next.bgDataUrl ? bgImageFor(next.bgDataUrl, next.id) : null) : s.bgImage,
+      ...(switching ? histFlagsOf(next.id) : {})
+    });
+    scheduleSave();
+  },
+
+  setActiveScene: (id) => {
+    const s = get();
+    const target = s.scenes.find(x => x.id === id);
+    if (!target || id === s.activeSceneId) return;
+    commitPending();
+    set({
+      activeSceneId: id,
+      selectedId: null,
+      hoveredId: null,
+      pendingBoxId: null,
+      pendingIsNew: false,
+      bgImage: target.bgDataUrl ? bgImageFor(target.bgDataUrl, id) : null,
+      ...histFlagsOf(id)
+    });
+    scheduleSave();
+  },
+
+  importProject: (parsed) => {
+    if (!parsed.length) return;
+    const s = get();
+    commitPending();
+    sceneHistories.clear(); // every scene id is replaced
+    let nextId = s.nextId;
+    let colorIndex = s.colorIndex;
+    let sceneId = Math.max(0, ...s.scenes.map(x => x.id)) + 1;
+    let labelHistory = s.labelHistory;
+    let metaHistory = s.metaHistory;
+    const scenes: Scene[] = parsed.map((p, i) => {
+      for (const it of p.layout.items) labelHistory = rememberValue(labelHistory, it.label);
+      if (p.layout.summary) metaHistory = rememberValues(metaHistory, p.layout.summary.meta);
+      const boxes: Box[] = p.layout.items.map((it, j) => {
+        const [ay, bx, cy, dx] = it.bbox.map(Math.round);
+        return {
+          id: nextId++,
+          label: it.label,
+          caption: it.caption,
+          text: it.text,
+          ymin: Math.min(ay, cy),
+          ymax: Math.max(ay, cy),
+          xmin: Math.min(bx, dx),
+          xmax: Math.max(bx, dx),
+          color: PALETTE[colorIndex++ % PALETTE.length],
+          z: j + 1,
+          hidden: it.hidden,
+          locked: it.locked
+        };
+      });
+      const sm = p.layout.summary;
+      return {
+        id: sceneId++,
+        name: p.name || "Scene " + (i + 1),
+        width: p.width,
+        height: p.height,
+        boxes,
+        metaText: sm ? sm.meta.join(", ") : "",
+        canvasType: sm ? sm.canvas : "single",
+        sceneCaption: sm ? sm.caption : "",
+        negPrompt: p.negPrompt,
+        bgDataUrl: p.bg,
+        uploadedBgDataUrl: p.uploadedBg,
+        bgInfo: p.bg ? "imported" : "",
+        uploadedBgInfo: p.uploadedBg ? "imported" : ""
+      };
+    });
+    saveHistory(LABEL_HISTORY_KEY, labelHistory);
+    saveHistory(META_HISTORY_KEY, metaHistory);
+    const first = scenes[0];
+    set({
+      scenes,
+      activeSceneId: first.id,
+      nextId,
+      colorIndex,
+      labelHistory,
+      metaHistory,
+      selectedId: null,
+      hoveredId: null,
+      pendingBoxId: null,
+      pendingIsNew: false,
+      bgImage: first.bgDataUrl ? bgImageFor(first.bgDataUrl, first.id) : null,
+      canUndo: false,
+      canRedo: false
+    });
+    scheduleSave();
   },
 
   applySize: (w, h) => {
-    set({ width: w, height: h });
-    saveCanvasSize(w, h);
+    updateActive({ width: w, height: h });
   },
 
-  setUploadedBg: (img, info) =>
-    set({ uploadedBg: img, uploadedBgInfo: info, bgImage: img, bgInfo: info }),
+  setUploadedBg: (img, info, dataUrl) => {
+    updateActive({
+      bgDataUrl: dataUrl,
+      uploadedBgDataUrl: dataUrl,
+      bgInfo: info,
+      uploadedBgInfo: info
+    });
+    set({ bgImage: img });
+  },
 
   select: (id) =>
     set(s => {
+      const sc = activeScene(s);
       if (id === null) return { selectedId: null };
-      const idx = s.boxes.findIndex(b => b.id === id);
+      const idx = sc.boxes.findIndex(b => b.id === id);
       if (idx === -1) return { selectedId: id };
-      const topZ = s.boxes.reduce((m, b) => Math.max(m, b.z), 0);
-      const box = s.boxes[idx];
-      if (box.z === topZ) return { selectedId: id };
-      box.z = topZ + 1;
-      return { selectedId: id, boxes: [...s.boxes] };
+      const topZ = sc.boxes.reduce((m, b) => Math.max(m, b.z), 0);
+      if (sc.boxes[idx].z === topZ) return { selectedId: id };
+      const boxes = sc.boxes.map(b => (b.id === id ? { ...b, z: topZ + 1 } : b));
+      return {
+        selectedId: id,
+        scenes: s.scenes.map(x => (x.id === sc.id ? { ...x, boxes } : x))
+      };
     }),
 
   setHoveredId: (id) => set(s => (s.hoveredId === id ? {} : { hoveredId: id })),
@@ -563,8 +946,9 @@ export const useStore = create<CanvasState>()((set, get) => {
   // commit any pending text-edit session: closing the modal (Enter, Escape, buttons)
   // unmounts the focused field, so its blur event never fires
   setPendingBoxId: (id) => {
-    history.end(docSnap(get()));
-    set({ pendingBoxId: id, pendingIsNew: false, ...histFlags() });
+    const sc = activeScene(get());
+    histOf(sc.id).end(docSnap(sc));
+    set({ pendingBoxId: id, pendingIsNew: false, ...histFlagsOf(sc.id) });
   },
 
   openBoxEditor: (id) => {
@@ -574,7 +958,8 @@ export const useStore = create<CanvasState>()((set, get) => {
 
   beginDraw: (x, y) => {
     const s = get();
-    const topZ = s.boxes.reduce((m, b) => Math.max(m, b.z), 0);
+    const sc = activeScene(s);
+    const topZ = sc.boxes.reduce((m, b) => Math.max(m, b.z), 0);
     const box: Box = {
       id: s.nextId,
       label: "",
@@ -593,14 +978,31 @@ export const useStore = create<CanvasState>()((set, get) => {
     return box;
   },
 
-  finishDraw: (box) =>
-    set(s => ({ boxes: [...s.boxes, box], selectedId: box.id, pendingBoxId: box.id, pendingIsNew: true })),
+  finishDraw: (box) => {
+    set(s => {
+      const sc = activeScene(s);
+      return {
+        scenes: s.scenes.map(x => (x.id === sc.id ? { ...x, boxes: [...x.boxes, box] } : x)),
+        selectedId: box.id,
+        pendingBoxId: box.id,
+        pendingIsNew: true
+      };
+    });
+    scheduleSave();
+  },
 
-  touchBoxes: () => set(s => ({ boxes: [...s.boxes] })),
+  touchBoxes: () => {
+    set(s => {
+      const sc = activeScene(s);
+      return { scenes: s.scenes.map(x => (x.id === sc.id ? { ...x, boxes: [...x.boxes] } : x)) };
+    });
+    scheduleSave();
+  },
 
   updateBox: (id, patch) => {
     const s = get();
-    if (!s.boxes.some(b => b.id === id)) return;
+    const sc = activeScene(s);
+    if (!sc.boxes.some(b => b.id === id)) return;
     // label/caption/text edit live while the field is focused — their session commits on blur
     const isText = patch.label !== undefined || patch.caption !== undefined || patch.text !== undefined;
     if (!isText) {
@@ -608,67 +1010,88 @@ export const useStore = create<CanvasState>()((set, get) => {
         patch.xmin !== undefined || patch.xmax !== undefined || patch.ymin !== undefined || patch.ymax !== undefined
           ? "coords"
           : Object.keys(patch)[0] || "patch";
-      history.record(docSnap(s), "box:" + id + ":" + field);
+      histOf(sc.id).record(docSnap(sc), "box:" + id + ":" + field);
     }
     set(s2 => {
+      const sc2 = activeScene(s2);
       const toggled = patch.hidden !== undefined || patch.locked !== undefined;
       return {
-        boxes: s2.boxes.map(b => (b.id === id ? { ...b, ...patch } : b)),
+        scenes: s2.scenes.map(x =>
+          x.id === sc2.id ? { ...x, boxes: x.boxes.map(b => (b.id === id ? { ...b, ...patch } : b)) } : x
+        ),
         ...(toggled && s2.hoveredId === id ? { hoveredId: null } : {}),
-        ...histFlags()
+        ...histFlagsOf(sc2.id)
       };
     });
+    scheduleSave();
   },
 
   deleteBox: (id) => {
     const s = get();
-    if (!s.boxes.some(b => b.id === id)) return;
-    history.record(docSnap(s), "op:" + ++opSeq);
-    set(s2 => ({
-      boxes: s2.boxes.filter(b => b.id !== id),
-      selectedId: s2.selectedId === id ? null : s2.selectedId,
-      hoveredId: s2.hoveredId === id ? null : s2.hoveredId,
-      pendingBoxId: s2.pendingBoxId === id ? null : s2.pendingBoxId,
-      pendingIsNew: s2.pendingBoxId === id ? false : s2.pendingIsNew,
-      ...histFlags()
-    }));
+    const sc = activeScene(s);
+    if (!sc.boxes.some(b => b.id === id)) return;
+    histOf(sc.id).record(docSnap(sc), "op:" + ++opSeq);
+    set(s2 => {
+      const sc2 = activeScene(s2);
+      return {
+        scenes: s2.scenes.map(x => (x.id === sc2.id ? { ...x, boxes: x.boxes.filter(b => b.id !== id) } : x)),
+        selectedId: s2.selectedId === id ? null : s2.selectedId,
+        hoveredId: s2.hoveredId === id ? null : s2.hoveredId,
+        pendingBoxId: s2.pendingBoxId === id ? null : s2.pendingBoxId,
+        pendingIsNew: s2.pendingBoxId === id ? false : s2.pendingIsNew,
+        ...histFlagsOf(sc2.id)
+      };
+    });
+    scheduleSave();
   },
 
   moveBox: (id, toIndex) => {
     const s = get();
-    if (s.boxes.findIndex(b => b.id === id) === -1) return;
-    history.record(docSnap(s), "op:" + ++opSeq);
+    const sc = activeScene(s);
+    if (sc.boxes.findIndex(b => b.id === id) === -1) return;
+    histOf(sc.id).record(docSnap(sc), "op:" + ++opSeq);
     set(s2 => {
-      const from = s2.boxes.findIndex(b => b.id === id);
+      const sc2 = activeScene(s2);
+      const from = sc2.boxes.findIndex(b => b.id === id);
       if (from === -1) return {};
-      const boxes = s2.boxes.slice();
+      const boxes = sc2.boxes.slice();
       const [box] = boxes.splice(from, 1);
       const target = Math.max(0, Math.min(from < toIndex ? toIndex - 1 : toIndex, boxes.length));
       boxes.splice(target, 0, box);
-      return { boxes, ...histFlags() };
+      return {
+        scenes: s2.scenes.map(x => (x.id === sc2.id ? { ...x, boxes } : x)),
+        ...histFlagsOf(sc2.id)
+      };
     });
+    scheduleSave();
   },
 
   clearAll: () => {
     const s = get();
-    const empty = !s.boxes.length && !s.metaText && !s.canvasType && !s.sceneCaption && !s.negPrompt;
-    if (!empty) history.record(docSnap(s), "op:" + ++opSeq);
-    set({
-      boxes: [],
-      selectedId: null,
-      hoveredId: null,
-      pendingBoxId: null,
-      pendingIsNew: false,
-      metaText: "",
-      canvasType: "single",
-      sceneCaption: "",
-      negPrompt: "",
-      ...histFlags()
+    const sc = activeScene(s);
+    const empty = !sc.boxes.length && !sc.metaText && !sc.canvasType && !sc.sceneCaption && !sc.negPrompt;
+    if (!empty) histOf(sc.id).record(docSnap(sc), "op:" + ++opSeq);
+    set(s2 => {
+      const sc2 = activeScene(s2);
+      return {
+        scenes: s2.scenes.map(x =>
+          x.id === sc2.id
+            ? { ...x, boxes: [], metaText: "", canvasType: "single", sceneCaption: "", negPrompt: "" }
+            : x
+        ),
+        selectedId: null,
+        hoveredId: null,
+        pendingBoxId: null,
+        pendingIsNew: false,
+        ...histFlagsOf(sc2.id)
+      };
     });
+    scheduleSave();
   },
 
   importLayout: (parsed) => {
     const s = get();
+    const sc = activeScene(s);
     let nextId = s.nextId;
     let colorIndex = s.colorIndex;
     let labelHistory = s.labelHistory;
@@ -688,57 +1111,66 @@ export const useStore = create<CanvasState>()((set, get) => {
         xmax: Math.max(bx, dx),
         color: PALETTE[colorIndex++ % PALETTE.length],
         z: i + 1,
-        hidden: false,
-        locked: false
+        hidden: it.hidden,
+        locked: it.locked
       };
     });
     const sm = parsed.summary;
-    const nextMeta = sm ? sm.meta.join(", ") : s.metaText;
-    const nextCanvas = sm ? sm.canvas : s.canvasType;
-    const nextCaption = sm ? sm.caption : s.sceneCaption;
+    const nextMeta = sm ? sm.meta.join(", ") : sc.metaText;
+    const nextCanvas = sm ? sm.canvas : sc.canvasType;
+    const nextCaption = sm ? sm.caption : sc.sceneCaption;
     if (
-      docFingerprint({ boxes, metaText: nextMeta, canvasType: nextCanvas, sceneCaption: nextCaption, negPrompt: s.negPrompt }) !==
-      docFingerprint({ boxes: s.boxes, metaText: s.metaText, canvasType: s.canvasType, sceneCaption: s.sceneCaption, negPrompt: s.negPrompt })
+      docFingerprint({ boxes, metaText: nextMeta, canvasType: nextCanvas, sceneCaption: nextCaption, negPrompt: sc.negPrompt }) !==
+      docFingerprint(docSnap(sc))
     ) {
-      history.record(docSnap(s), "op:" + ++opSeq);
+      histOf(sc.id).record(docSnap(sc), "op:" + ++opSeq);
     }
     saveHistory(LABEL_HISTORY_KEY, labelHistory);
     saveHistory(META_HISTORY_KEY, metaHistory);
-    set({
-      boxes,
-      nextId,
-      colorIndex,
-      labelHistory,
-      metaHistory,
-      selectedId: null,
-      hoveredId: null,
-      metaText: nextMeta,
-      canvasType: nextCanvas,
-      sceneCaption: nextCaption,
-      ...histFlags()
+    set(s2 => {
+      const sc2 = activeScene(s2);
+      return {
+        scenes: s2.scenes.map(x =>
+          x.id === sc2.id
+            ? { ...x, boxes, metaText: nextMeta, canvasType: nextCanvas, sceneCaption: nextCaption }
+            : x
+        ),
+        nextId,
+        colorIndex,
+        labelHistory,
+        metaHistory,
+        selectedId: null,
+        hoveredId: null,
+        ...histFlagsOf(sc2.id)
+      };
     });
+    scheduleSave();
   },
 
   // typing sessions commit on blur (see beginChange/endChange)
   setMetaText: (text) => {
-    if (get().metaText === text) return;
-    set({ metaText: text });
+    const sc = activeScene(get());
+    if (sc.metaText === text) return;
+    updateActive({ metaText: text });
   },
 
   // Discrete edits from the meta picker: a pending typing session is committed first,
   // then the step is recorded, so both stay separately undoable
   removeMetaValue: (value) => {
     const s = get();
+    const sc = activeScene(s);
     const k = value.trim().toLowerCase();
     if (!k) return;
-    const cur = splitMeta(s.metaText);
+    const cur = splitMeta(sc.metaText);
     const next = cur.filter(t => t.toLowerCase() !== k);
     if (next.length === cur.length) return;
-    history.end(docSnap(s));
-    history.record(docSnap(s), "op:" + ++opSeq);
-    set({ metaText: next.join(", "), ...histFlags() });
+    const h = histOf(sc.id);
+    h.end(docSnap(sc));
+    h.record(docSnap(sc), "op:" + ++opSeq);
+    updateActive({ metaText: next.join(", ") }, { ...histFlagsOf(sc.id) });
     if (document.activeElement === document.getElementById("jsonMeta")) {
-      history.begin(docSnap(get()));
+      const sc2 = activeScene(get());
+      histOf(sc2.id).begin(docSnap(sc2));
     }
   },
 
@@ -746,35 +1178,37 @@ export const useStore = create<CanvasState>()((set, get) => {
     const v = value.trim();
     if (!v) return;
     const s = get();
-    const cur = splitMeta(s.metaText);
+    const sc = activeScene(s);
+    const cur = splitMeta(sc.metaText);
     if (cur.some(t => t.toLowerCase() === v.toLowerCase())) return;
-    history.end(docSnap(s));
-    history.record(docSnap(s), "op:" + ++opSeq);
+    const h = histOf(sc.id);
+    h.end(docSnap(sc));
+    h.record(docSnap(sc), "op:" + ++opSeq);
     const mh = rememberValues(s.metaHistory, [v]);
     saveHistory(META_HISTORY_KEY, mh);
-    set({
-      metaText: cur.length ? cur.join(", ") + ", " + v : v,
-      metaHistory: mh,
-      ...histFlags()
-    });
+    updateActive({ metaText: cur.length ? cur.join(", ") + ", " + v : v }, { metaHistory: mh, ...histFlagsOf(sc.id) });
     if (document.activeElement === document.getElementById("jsonMeta")) {
-      history.begin(docSnap(get()));
+      const sc2 = activeScene(get());
+      histOf(sc2.id).begin(docSnap(sc2));
     }
   },
 
   setCanvasType: (text) => {
-    if (get().canvasType === text) return;
-    set({ canvasType: text });
+    const sc = activeScene(get());
+    if (sc.canvasType === text) return;
+    updateActive({ canvasType: text });
   },
 
   setSceneCaption: (text) => {
-    if (get().sceneCaption === text) return;
-    set({ sceneCaption: text });
+    const sc = activeScene(get());
+    if (sc.sceneCaption === text) return;
+    updateActive({ sceneCaption: text });
   },
 
   setNegPrompt: (text) => {
-    if (get().negPrompt === text) return;
-    set({ negPrompt: text });
+    const sc = activeScene(get());
+    if (sc.negPrompt === text) return;
+    updateActive({ negPrompt: text });
   },
 
   setJsonMode: (v) => set({ jsonMode: v }),
@@ -891,27 +1325,28 @@ export const useStore = create<CanvasState>()((set, get) => {
   generate: async () => {
     const s = get();
     if (s.genBusy) return;
+    const sc = activeScene(s);
     let prompt: string;
     if (s.jsonMode) {
       prompt = toLayoutText(
-        summaryFromState({ metaText: s.metaText, canvasType: s.canvasType, sceneCaption: s.sceneCaption }),
-        s.boxes
+        summaryFromState({ metaText: sc.metaText, canvasType: sc.canvasType, sceneCaption: sc.sceneCaption }),
+        sc.boxes
       );
     } else {
-      if (!s.sceneCaption.trim()) {
+      if (!sc.sceneCaption.trim()) {
         set({ genStatus: { msg: "specify a caption", isError: true } });
         return;
       }
-      prompt = s.sceneCaption;
+      prompt = sc.sceneCaption;
     }
-    const ew = s.genFromCanvas ? String(s.width) : s.genW;
-    const eh = s.genFromCanvas ? String(s.height) : s.genH;
+    const ew = s.genFromCanvas ? String(sc.width) : s.genW;
+    const eh = s.genFromCanvas ? String(sc.height) : s.genH;
     let body: ReturnType<typeof buildGenBody>["body"];
     let clamped: ReturnType<typeof buildGenBody>["clamped"];
     try {
       ({ body, clamped } = buildGenBody({
         prompt,
-        negativePrompt: s.negPrompt,
+        negativePrompt: sc.negPrompt,
         width: ew,
         height: eh,
         count: s.genCount,
@@ -1013,11 +1448,21 @@ export const useStore = create<CanvasState>()((set, get) => {
       }
       if (lastEl && get().genAutoBg) {
         const st = get();
-        set({
-          bgImage: lastEl,
-          bgInfo:
-            lastEl.naturalWidth + "×" + lastEl.naturalHeight + " → " + st.width + "×" + st.height + " (generated)"
-        });
+        const act = activeScene(st);
+        set({ bgImage: lastEl });
+        set(s2 => ({
+          scenes: s2.scenes.map(x =>
+            x.id === act.id
+              ? {
+                  ...x,
+                  bgDataUrl: lastEl.src,
+                  bgInfo:
+                    lastEl.naturalWidth + "×" + lastEl.naturalHeight + " → " + x.width + "×" + x.height + " (generated)"
+                }
+              : x
+          )
+        }));
+        scheduleSave();
       }
       if (genTimer !== null) clearInterval(genTimer);
       genTimer = null;
@@ -1069,21 +1514,32 @@ export const useStore = create<CanvasState>()((set, get) => {
 
   useAsBg: (id) => {
     const s = get();
+    const sc = activeScene(s);
     const g = s.gallery.find(x => x.id === id);
     if (!g) return;
     if (s.bgImage === g.img) {
-      set(
-        s.uploadedBg
-          ? { bgImage: s.uploadedBg, bgInfo: s.uploadedBgInfo }
-          : { bgImage: null, bgInfo: "" }
+      const url = sc.uploadedBgDataUrl;
+      updateActive(
+        { bgDataUrl: url, bgInfo: url ? sc.uploadedBgInfo : "" },
+        { bgImage: url ? bgImageFor(url, sc.id) : null }
       );
       return;
     }
-    set({
-      bgImage: g.img,
-      bgInfo:
-        g.img.naturalWidth + "×" + g.img.naturalHeight + " → " + s.width + "×" + s.height + " (generated)"
-    });
+    updateActive(
+      {
+        bgDataUrl: g.img.src,
+        bgInfo:
+          g.img.naturalWidth + "×" + g.img.naturalHeight + " → " + sc.width + "×" + sc.height + " (generated)"
+      },
+      { bgImage: g.img }
+    );
   }
   });
 });
+
+// restore the background of the initial active scene (the image loads asynchronously)
+{
+  const s = useStore.getState();
+  const sc = activeScene(s);
+  if (sc.bgDataUrl) bgImageFor(sc.bgDataUrl, sc.id);
+}

@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from "react";
-import { useStore } from "../store";
+import { useStore, activeScene } from "../store";
 import BackgroundSection from "./BackgroundSection";
 
 type RatioPreset = { label: string; w: number; h: number };
@@ -56,8 +56,8 @@ export default function CanvasSettingsModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const W = useStore(s => s.width);
-  const H = useStore(s => s.height);
+  const W = useStore(activeScene).width;
+  const H = useStore(activeScene).height;
   const applySize = useStore(s => s.applySize);
   const showGrid = useStore(s => s.showGrid);
   const setShowGrid = useStore(s => s.setShowGrid);
@@ -71,8 +71,8 @@ export default function CanvasSettingsModal({
   const [draftH, setDraftH] = useState<string | null>(null);
   const [draftGrid, setDraftGrid] = useState<string | null>(null);
   const [ratioLocked, setRatioLocked] = useState(() => {
-    const st = useStore.getState();
-    return RATIOS.some(rt => Math.abs(st.width / st.height - rt.w / rt.h) / (rt.w / rt.h) < RATIO_TOL);
+    const sc = activeScene(useStore.getState());
+    return RATIOS.some(rt => Math.abs(sc.width / sc.height - rt.w / rt.h) / (rt.w / rt.h) < RATIO_TOL);
   });
 
   const ratioValue = W / H;

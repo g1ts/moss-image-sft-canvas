@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore, summaryFromState } from "../store";
+import { useStore, activeScene, summaryFromState } from "../store";
 import { parseLayout, toLayoutText } from "../lib/geometry";
 import { splitMeta } from "../lib/valueHistory";
 import GearIcon from "./GearIcon";
@@ -7,10 +7,11 @@ import LabelInput from "./LabelInput";
 import MetaPicker from "./MetaPicker";
 
 export default function JsonPanel() {
-  const boxes = useStore(s => s.boxes);
-  const metaText = useStore(s => s.metaText);
-  const canvasType = useStore(s => s.canvasType);
-  const sceneCaption = useStore(s => s.sceneCaption);
+  const scene = useStore(activeScene);
+  const boxes = scene.boxes;
+  const metaText = scene.metaText;
+  const canvasType = scene.canvasType;
+  const sceneCaption = scene.sceneCaption;
   const jsonMode = useStore(s => s.jsonMode);
   const setJsonMode = useStore(s => s.setJsonMode);
   const importLayout = useStore(s => s.importLayout);

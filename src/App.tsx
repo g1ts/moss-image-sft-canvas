@@ -5,6 +5,7 @@ import BoxList from "./components/BoxList";
 import CanvasStage from "./components/CanvasStage";
 import Gallery from "./components/Gallery";
 import JsonPanel from "./components/JsonPanel";
+import ScenePicker from "./components/ScenePicker";
 import StatusBar from "./components/StatusBar";
 import SettingsModal from "./components/SettingsModal";
 import CanvasSettingsModal from "./components/CanvasSettingsModal";
@@ -93,6 +94,7 @@ export default function App() {
           MOSS-Image-SFT Canvas
         </h1>
         <div className="header-actions">
+          <ScenePicker />
           <div className="header-tools">
             <div className="history-nav">
               <button
