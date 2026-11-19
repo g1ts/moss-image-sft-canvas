@@ -273,6 +273,26 @@ function saveGalleryHidden(v: boolean): void {
   }
 }
 
+const LS_RIGHT_HIDDEN = "moss-image-sft-canvas:rightHidden";
+
+function readSavedRightHidden(): boolean {
+  try {
+    const raw = localStorage.getItem(LS_RIGHT_HIDDEN);
+    if (raw === null) return false;
+    return raw === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveRightHidden(v: boolean): void {
+  try {
+    localStorage.setItem(LS_RIGHT_HIDDEN, v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Scene set persistence
 
@@ -458,6 +478,9 @@ interface CanvasState extends GenParams {
   genPreviewFrame: GenPreviewFrame | null;
   cursor: { x: number; y: number } | null;
   action: string;
+  toast: string;
+  toastError: boolean;
+  toastId: number;
   jsonMode: boolean;
   showGrid: boolean;
   showCaptions: boolean;
@@ -465,6 +488,7 @@ interface CanvasState extends GenParams {
   snapToGrid: boolean;
   alignEnabled: boolean;
   galleryHidden: boolean;
+  rightHidden: boolean;
   labelHistory: string[];
   metaHistory: string[];
   schedOptions: string[];
@@ -532,11 +556,14 @@ interface CanvasState extends GenParams {
   setSnapToGrid: (v: boolean) => void;
   setAlignEnabled: (v: boolean) => void;
   setGalleryHidden: (v: boolean) => void;
+  setRightHidden: (v: boolean) => void;
   removeLabelHistory: (label: string) => void;
   rememberLabel: (label: string) => void;
   rememberMeta: (text: string) => void;
   setCursor: (x: number, y: number) => void;
   setAction: (text: string) => void;
+  showToast: (msg: string, isError?: boolean) => void;
+  clearToast: () => void;
   setGenBusy: (busy: boolean) => void;
   setGenStatus: (msg: string, isError: boolean) => void;
   setGenParam: (patch: Partial<GenParams>) => void;
@@ -742,6 +769,9 @@ export const useStore = create<CanvasState>()((set, get) => {
   genAutoBg: readSavedAutoBg(),
   cursor: null,
   action: "",
+  toast: "",
+  toastError: false,
+  toastId: 0,
   jsonMode: true,
   showGrid: readSavedGrid(),
   showCaptions: readSavedShowCaptions(),
@@ -749,6 +779,7 @@ export const useStore = create<CanvasState>()((set, get) => {
   snapToGrid: readSavedSnapGrid(),
   alignEnabled: readSavedAlign(),
   galleryHidden: readSavedGalleryHidden(),
+  rightHidden: readSavedRightHidden(),
   labelHistory: loadHistory(LABEL_HISTORY_KEY),
   metaHistory: loadHistory(META_HISTORY_KEY),
   canUndo: false,
@@ -1311,6 +1342,11 @@ export const useStore = create<CanvasState>()((set, get) => {
     saveGalleryHidden(v);
   },
 
+  setRightHidden: (v) => {
+    set({ rightHidden: v });
+    saveRightHidden(v);
+  },
+
   removeLabelHistory: (label) =>
     set(s => {
       const next = removeValue(s.labelHistory, label);
@@ -1336,6 +1372,10 @@ export const useStore = create<CanvasState>()((set, get) => {
   setCursor: (x, y) => set({ cursor: { x, y } }),
 
   setAction: (text) => set({ action: text }),
+
+  showToast: (msg, isError = false) =>
+    set(s => ({ toast: msg, toastError: isError, toastId: s.toastId + 1 })),
+  clearToast: () => set({ toast: "" }),
 
   setGenBusy: (busy) => set({ genBusy: busy }),
 

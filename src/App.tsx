@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import SummarySection from "./components/SummarySection";
 import BoxList from "./components/BoxList";
 
 import CanvasStage from "./components/CanvasStage";
 import Gallery from "./components/Gallery";
-import JsonPanel from "./components/JsonPanel";
+import RightPanel from "./components/RightPanel";
+import Toast from "./components/Toast";
 import ScenePicker from "./components/ScenePicker";
 import StatusBar from "./components/StatusBar";
 import SettingsModal from "./components/SettingsModal";
@@ -23,6 +23,7 @@ export default function App() {
   const genBusy = useStore(s => s.genBusy);
   const genStatus = useStore(s => s.genStatus);
   const jsonMode = useStore(s => s.jsonMode);
+  const setJsonMode = useStore(s => s.setJsonMode);
   const generate = useStore(s => s.generate);
   const cancelGeneration = useStore(s => s.cancelGeneration);
   const canUndo = useStore(s => s.canUndo);
@@ -200,6 +201,17 @@ export default function App() {
                 />
                 <span className="switch-track" aria-hidden="true" />
               </label>
+              <span className="switch-label">JSON</span>
+              <label className="switch" title="Toggle JSON mode">
+                <input
+                  type="checkbox"
+                  id="jsonModeToggle"
+                  aria-label="JSON mode"
+                  checked={jsonMode}
+                  onChange={e => setJsonMode(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
             </div>
           </div>
           <span
@@ -248,12 +260,10 @@ export default function App() {
           <CanvasStage onOpenSettings={() => setCanvasSettingsOpen(true)} />
           <Gallery onPreview={setPreviewItemId} />
         </div>
-        <aside className="right">
-          <SummarySection />
-          <JsonPanel />
-        </aside>
+        <RightPanel />
       </main>
       <StatusBar />
+      <Toast />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <CanvasSettingsModal open={canvasSettingsOpen} onClose={() => setCanvasSettingsOpen(false)} />
       <BoxModal boxId={pendingBoxId} onClose={() => setPendingBoxId(null)} />

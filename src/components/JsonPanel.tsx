@@ -1,20 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore, activeScene, summaryFromState } from "../store";
-import { parseLayout, toLayoutText } from "../lib/geometry";
+import { useStore, activeScene } from "../store";
 import { splitMeta } from "../lib/valueHistory";
 import GearIcon from "./GearIcon";
 import LabelInput from "./LabelInput";
 import MetaPicker from "./MetaPicker";
+import type { useLayoutJson } from "../lib/useLayoutJson";
 
-export default function JsonPanel() {
+type LayoutJson = ReturnType<typeof useLayoutJson>;
+
+export default function JsonPanel({ layout }: { layout: LayoutJson }) {
   const scene = useStore(activeScene);
-  const boxes = scene.boxes;
   const metaText = scene.metaText;
   const canvasType = scene.canvasType;
-  const sceneCaption = scene.sceneCaption;
   const jsonMode = useStore(s => s.jsonMode);
-  const setJsonMode = useStore(s => s.setJsonMode);
-  const importLayout = useStore(s => s.importLayout);
   const metaHistory = useStore(s => s.metaHistory);
   const setMetaText = useStore(s => s.setMetaText);
   const setCanvasType = useStore(s => s.setCanvasType);
@@ -23,9 +21,8 @@ export default function JsonPanel() {
   const rememberMeta = useStore(s => s.rememberMeta);
   const removeMetaValue = useStore(s => s.removeMetaValue);
   const addMetaValue = useStore(s => s.addMetaValue);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [metaPickerOpen, setMetaPickerOpen] = useState(false);
+  const { canonical, copied, error, copyJson, pasteJson, download } = layout;
   const metaRowRef = useRef<HTMLDivElement>(null);
 
   const metaTokens = useMemo(() => splitMeta(metaText), [metaText]);
@@ -49,83 +46,11 @@ export default function JsonPanel() {
     };
   }, [metaPickerOpen]);
 
-  const canonical = toLayoutText(
-    summaryFromState({ metaText, canvasType, sceneCaption }),
-    boxes
-  );
-
-  const importFromClipboard = async () => {
-    setError("");
-    let text: string;
-    try {
-      text = await navigator.clipboard.readText();
-    } catch {
-      setError("Could not access the clipboard");
-      return;
-    }
-    if (!text.trim()) {
-      setError("Clipboard is empty");
-      return;
-    }
-    let data: unknown;
-    try {
-      data = JSON.parse(text);
-    } catch (err) {
-      setError("Parse error: " + (err as Error).message);
-      return;
-    }
-    try {
-      importLayout(parseLayout(data));
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
-  const copyJson = async () => {
-    const done = () => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    };
-    try {
-      await navigator.clipboard.writeText(canonical);
-      done();
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = canonical;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      done();
-    }
-  };
-
-  const download = () => {
-    const blob = new Blob([canonical], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "layout.json";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
-
   return (
     <>
       <div className="section json-section">
         <div className="json-head">
           <h2>Scene (JSON)</h2>
-          <label className="switch" title="Toggle JSON mode">
-            <input
-              type="checkbox"
-              id="jsonModeToggle"
-              aria-label="JSON mode"
-              checked={jsonMode}
-              onChange={e => setJsonMode(e.target.checked)}
-            />
-            <span className="switch-track" aria-hidden="true" />
-          </label>
         </div>
       </div>
       {jsonMode && (
@@ -214,7 +139,7 @@ export default function JsonPanel() {
               className="gear-btn"
               title="Paste JSON from clipboard"
               aria-label="Paste JSON from clipboard"
-              onClick={importFromClipboard}
+               onClick={pasteJson}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
