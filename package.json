@@ -1,6 +1,6 @@
 {
   "name": "moss-image-sft-canvas",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Visual bounding-box layout editor that produces JSON for MOSS-Image-SFT layout-to-image generation, with optional in-app image generation via a stable-diffusion.cpp server",
   "type": "module",
   "license": "MIT",
