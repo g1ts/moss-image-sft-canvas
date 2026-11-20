@@ -1,5 +1,5 @@
-import { useState, type DragEvent } from "react";
-import { useStore, activeScene } from "../store";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+import { LEFT_MINI, useStore, activeScene } from "../store";
 import EyeIcon from "./EyeIcon";
 import LockIcon from "./LockIcon";
 import TrashIcon from "./TrashIcon";
@@ -7,10 +7,16 @@ import type { Box } from "../types";
 
 type DropTarget = { id: number; pos: "above" | "below" } | "end" | null;
 
+const FLOAT_BAR_W = 110;
+const FLOAT_BAR_H = 26;
+const FLOAT_HIDE_DELAY = 140;
+
 export default function BoxList() {
   const boxes = useStore(activeScene).boxes;
   const selectedId = useStore(s => s.selectedId);
   const hoveredId = useStore(s => s.hoveredId);
+  const leftWidth = useStore(s => s.leftWidth);
+  const pendingBoxId = useStore(s => s.pendingBoxId);
   const select = useStore(s => s.select);
   const setHoveredId = useStore(s => s.setHoveredId);
   const deleteBox = useStore(s => s.deleteBox);
@@ -20,12 +26,103 @@ export default function BoxList() {
   const clearAll = useStore(s => s.clearAll);
   const moveBox = useStore(s => s.moveBox);
 
+  const mini = leftWidth < LEFT_MINI;
+
   const [dragId, setDragId] = useState<number | null>(null);
   const [drop, setDrop] = useState<DropTarget>(null);
+  const [bar, setBar] = useState<{ id: number; top: number; left: number } | null>(null);
+  const hideTimer = useRef<number | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const cancelHide = () => {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+
+  const hideBarNow = () => {
+    cancelHide();
+    setBar(null);
+  };
+
+  // The float bar's z-index would put it above the modal backdrop, so hide it
+  // while the box modal is open (it is anchored to a row, not the modal)
+  useEffect(() => {
+    if (pendingBoxId !== null) hideBarNow();
+  }, [pendingBoxId]);
+
+  const scheduleHide = () => {
+    if (hideTimer.current !== null) return;
+    hideTimer.current = window.setTimeout(() => {
+      hideTimer.current = null;
+      setBar(null);
+    }, FLOAT_HIDE_DELAY);
+  };
+
+  const showActions = (id: number, el: HTMLElement) => {
+    if (!mini) return;
+    cancelHide();
+    const r = el.getBoundingClientRect();
+    const aside = el.closest("aside.left");
+    const a = aside ? aside.getBoundingClientRect() : null;
+    const left = a
+      ? Math.max(8, Math.min(a.right + 4, window.innerWidth - FLOAT_BAR_W - 6))
+      : r.right + 4;
+    const top = Math.max(
+      6,
+      Math.min(r.top + r.height / 2 - FLOAT_BAR_H / 2, window.innerHeight - FLOAT_BAR_H - 6)
+    );
+    setBar({ id, top, left });
+  };
+
+  const mouse = useRef({ x: 0, y: 0 });
+
+  // After the list scrolls, the row under the (stationary) pointer changes and no
+  // mouseenter fires, so re-anchor the bar to the row under the pointer or hide it.
+  // Runs on the next frame, since the scroll event can fire before the new layout
+  const resyncBar = () => {
+    cancelHide();
+    requestAnimationFrame(() => {
+      const t = document.elementFromPoint(mouse.current.x, mouse.current.y);
+      const row = t ? (t.closest(".box-item") as HTMLElement | null) : null;
+      if (row && row.dataset.boxId !== undefined) showActions(Number(row.dataset.boxId), row);
+      else setBar(null);
+    });
+  };
+
+  // latest value for the stable listeners below
+  const resyncRef = useRef(resyncBar);
+  resyncRef.current = resyncBar;
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      mouse.current = { x: e.clientX, y: e.clientY };
+    };
+    const onResize = () => {
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+      setBar(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("resize", onResize);
+    // on short viewports the aside itself scrolls (scroll events do not bubble),
+    // so listen for it separately
+    const aside = rootRef.current?.closest("aside.left");
+    const onAsideScroll = () => resyncRef.current();
+    aside?.addEventListener("scroll", onAsideScroll, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("resize", onResize);
+      aside?.removeEventListener("scroll", onAsideScroll);
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    };
+  }, []);
 
   const resetDrag = () => {
     setDragId(null);
     setDrop(null);
+    hideBarNow();
   };
 
   // The insertion position is computed from the drop event geometry rather than state,
@@ -47,8 +144,10 @@ export default function BoxList() {
     resetDrag();
   };
 
+  const barBox = bar ? boxes.find(b => b.id === bar.id) : undefined;
+
   return (
-    <div className="section grow">
+    <div className="section grow" ref={rootRef}>
       <div className="box-header">
         <h2>
           Boxes (<span id="boxCount">{boxes.length}</span>)
@@ -78,6 +177,7 @@ export default function BoxList() {
           setDrop(prev => (prev === null ? prev : null));
         }}
         onDrop={dropOnList}
+        onScroll={resyncBar}
       >
         {boxes.length === 0 ? (
           <div id="boxListEmpty">
@@ -105,10 +205,13 @@ export default function BoxList() {
               onDragStart={e => {
                 e.dataTransfer.effectAllowed = "move";
                 e.dataTransfer.setData("text/plain", String(b.id));
+                hideBarNow();
                 setDragId(b.id);
               }}
               onDragEnd={resetDrag}
               onHover={h => setHoveredId(h ? b.id : null)}
+              onShowActions={(bx, el) => showActions(bx.id, el)}
+              onHideActions={scheduleHide}
               onDragOver={e => {
                 if (dragId === null || dragId === b.id) return;
                 e.preventDefault();
@@ -127,6 +230,25 @@ export default function BoxList() {
           ))
         )}
       </div>
+      {mini && bar && barBox ? (
+        <div
+          className="box-actions float"
+          style={{ top: bar.top, left: bar.left }}
+          onMouseEnter={cancelHide}
+          onMouseLeave={scheduleHide}
+        >
+          <BoxActions
+            box={barBox}
+            onToggleHidden={() => updateBox(barBox.id, { hidden: !barBox.hidden })}
+            onToggleLocked={() => updateBox(barBox.id, { locked: !barBox.locked })}
+            onDuplicate={() => duplicateBox(barBox.id)}
+            onDelete={() => {
+              deleteBox(barBox.id);
+              hideBarNow();
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -147,7 +269,9 @@ function BoxItem({
   onDragEnd,
   onDragOver,
   onDrop,
-  onHover
+  onHover,
+  onShowActions,
+  onHideActions
 }: {
   box: Box;
   selected: boolean;
@@ -165,6 +289,8 @@ function BoxItem({
   onDragOver: (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (e: DragEvent<HTMLDivElement>) => void;
   onHover: (hovering: boolean) => void;
+  onShowActions: (box: Box, el: HTMLElement) => void;
+  onHideActions: () => void;
 }) {
   const cls =
     "box-item" +
@@ -176,6 +302,7 @@ function BoxItem({
   return (
     <div
       className={cls}
+      data-box-id={box.id}
       draggable
       onClick={onSelect}
       onDoubleClick={onEdit}
@@ -183,16 +310,56 @@ function BoxItem({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
+      onMouseEnter={e => {
+        onHover(true);
+        onShowActions(box, e.currentTarget);
+      }}
+      onMouseLeave={() => {
+        onHover(false);
+        onHideActions();
+      }}
     >
       <div className="grip" title="Drag to change the order" aria-hidden="true">
         ⋮⋮
       </div>
-      <div className="swatch" style={{ background: box.color }} />
+      <div className="swatch" style={{ background: box.color }}>
+        {box.locked && (
+          <span className="lock-badge" title="Box is locked" aria-label="Box is locked">
+            <LockIcon locked />
+          </span>
+        )}
+      </div>
       <div className="meta">
         <span className={"label" + (box.label ? "" : " empty")}>{box.label || "label"}</span>
       </div>
+      <div className="box-actions">
+        <BoxActions
+          box={box}
+          onToggleHidden={onToggleHidden}
+          onToggleLocked={onToggleLocked}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+        />
+      </div>
+    </div>
+  );
+}
+
+function BoxActions({
+  box,
+  onToggleHidden,
+  onToggleLocked,
+  onDuplicate,
+  onDelete
+}: {
+  box: Box;
+  onToggleHidden: () => void;
+  onToggleLocked: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
       <button
         className={"eye" + (box.hidden ? " active" : "")}
         title={box.hidden ? "Show box" : "Hide box"}
@@ -253,6 +420,6 @@ function BoxItem({
       >
         ✕
       </button>
-    </div>
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import BoxList from "./components/BoxList";
+import LeftPanel from "./components/LeftPanel";
 
 import CanvasStage from "./components/CanvasStage";
 import Gallery from "./components/Gallery";
@@ -251,11 +251,7 @@ export default function App() {
         </div>
       </header>
       <main>
-        {jsonMode && (
-          <aside className="left">
-            <BoxList />
-          </aside>
-        )}
+        {jsonMode && <LeftPanel />}
         <div id="centerCol">
           <CanvasStage onOpenSettings={() => setCanvasSettingsOpen(true)} />
           <Gallery onPreview={setPreviewItemId} />

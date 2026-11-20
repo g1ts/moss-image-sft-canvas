@@ -293,6 +293,35 @@ function saveRightHidden(v: boolean): void {
   }
 }
 
+export const LEFT_MIN = 130;
+export const LEFT_DEFAULT = 280;
+export const LEFT_MAX = 500;
+// Below this width the action buttons no longer fit, so the list switches to the
+// compact view: grip + swatch + label, buttons appear as an overlay on hover.
+export const LEFT_MINI = 210;
+
+const LS_LEFT_WIDTH = "moss-image-sft-canvas:leftWidth";
+
+function readSavedLeftWidth(): number {
+  try {
+    const raw = localStorage.getItem(LS_LEFT_WIDTH);
+    if (raw === null) return LEFT_DEFAULT;
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) return LEFT_DEFAULT;
+    return Math.min(LEFT_MAX, Math.max(LEFT_MIN, n));
+  } catch {
+    return LEFT_DEFAULT;
+  }
+}
+
+function saveLeftWidth(v: number): void {
+  try {
+    localStorage.setItem(LS_LEFT_WIDTH, String(v));
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Scene set persistence
 
@@ -489,6 +518,7 @@ interface CanvasState extends GenParams {
   alignEnabled: boolean;
   galleryHidden: boolean;
   rightHidden: boolean;
+  leftWidth: number;
   labelHistory: string[];
   metaHistory: string[];
   schedOptions: string[];
@@ -557,6 +587,7 @@ interface CanvasState extends GenParams {
   setAlignEnabled: (v: boolean) => void;
   setGalleryHidden: (v: boolean) => void;
   setRightHidden: (v: boolean) => void;
+  setLeftWidth: (w: number) => void;
   removeLabelHistory: (label: string) => void;
   rememberLabel: (label: string) => void;
   rememberMeta: (text: string) => void;
@@ -780,6 +811,7 @@ export const useStore = create<CanvasState>()((set, get) => {
   alignEnabled: readSavedAlign(),
   galleryHidden: readSavedGalleryHidden(),
   rightHidden: readSavedRightHidden(),
+  leftWidth: readSavedLeftWidth(),
   labelHistory: loadHistory(LABEL_HISTORY_KEY),
   metaHistory: loadHistory(META_HISTORY_KEY),
   canUndo: false,
@@ -1345,6 +1377,12 @@ export const useStore = create<CanvasState>()((set, get) => {
   setRightHidden: (v) => {
     set({ rightHidden: v });
     saveRightHidden(v);
+  },
+
+  setLeftWidth: (w) => {
+    const v = Math.min(LEFT_MAX, Math.max(LEFT_MIN, Math.round(w)));
+    set({ leftWidth: v });
+    saveLeftWidth(v);
   },
 
   removeLabelHistory: (label) =>

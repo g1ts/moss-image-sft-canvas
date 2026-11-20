@@ -34,12 +34,32 @@ header {
 header h1 { font-size: 15px; font-weight: 600; }
 main { flex: 1; display: flex; min-height: 0; }
 aside.left {
-  width: 280px; min-width: 280px;
+  /* width is set inline from the store (leftWidth) */
+  min-width: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   min-height: 0;
+  position: relative;
 }
+.left-resizer {
+  position: absolute; top: 0; bottom: 0; right: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+.left-resizer::after {
+  content: "";
+  position: absolute; top: 0; bottom: 0; right: 2px;
+  width: 2px;
+  background: transparent;
+  transition: background-color .12s ease;
+}
+.left-resizer:hover::after,
+.left-resizer:active::after,
+body.left-resizing .left-resizer::after { background: var(--accent); }
+body.left-resizing { user-select: none; cursor: col-resize; }
 .section { padding: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .section.grow { flex: 1; display: flex; flex-direction: column; min-height: 0; border-bottom: none; }
 .section h2 {
@@ -77,7 +97,7 @@ button.primary:hover { filter: brightness(1.1); color: #0b1220; }
 button.danger:hover { border-color: var(--danger); color: var(--danger); }
 #boxList { overflow-y: auto; flex: 1; min-height: 0; padding-right: 2px; }
 .box-item {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 3px;
   padding: 6px 8px; border-radius: 6px; border: 1px solid transparent;
   cursor: pointer; margin-bottom: 4px;
 }
@@ -91,7 +111,15 @@ button.danger:hover { border-color: var(--danger); color: var(--danger); }
   letter-spacing: -1px; cursor: grab; flex-shrink: 0; user-select: none;
 }
 .box-item:hover .grip { color: var(--text); }
-.swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; position: relative; }
+.lock-badge {
+  position: absolute; inset: 1px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(11, 18, 32, .55); border-radius: 2px;
+  color: #fff; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .8));
+  pointer-events: none;
+}
+.lock-badge svg { width: 8px; height: 8px; }
 .box-item .meta { flex: 1; min-width: 0; }
 .box-item .label {
   display: block; width: 100%;
@@ -100,18 +128,45 @@ button.danger:hover { border-color: var(--danger); color: var(--danger); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .box-item .label.empty { color: var(--muted); }
-.box-item .del {
-  background: none; border: none; color: var(--muted);
-  font-size: 14px; padding: 2px 6px; border-radius: 4px;
+.box-item.is-hidden { opacity: .5; }
+/* action buttons take no space until the row is hovered:
+   the label fills the row, then the bar expands and the label shrinks */
+.box-actions {
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px;
+  flex-shrink: 0; overflow: hidden;
+  width: 0; opacity: 0; pointer-events: none;
 }
-.box-item .del:hover { color: var(--danger); }
-.box-item .eye, .box-item .lock, .box-item .dup {
+.box-item:hover .box-actions,
+.box-item:focus-within .box-actions { width: 100px; opacity: 1; pointer-events: auto; }
+.box-actions .eye, .box-actions .lock, .box-actions .dup {
   background: none; border: none; color: var(--muted);
   display: inline-flex; align-items: center; padding: 2px 4px; border-radius: 4px;
 }
-.box-item .eye:hover, .box-item .lock:hover, .box-item .dup:hover { color: var(--text); }
-.box-item .eye.active, .box-item .lock.active { color: var(--accent); }
-.box-item.is-hidden { opacity: .5; }
+.box-actions .del {
+  background: none; border: none; color: var(--muted);
+  font-size: 14px; padding: 2px 6px; border-radius: 4px;
+}
+.box-actions .eye:hover, .box-actions .lock:hover, .box-actions .dup:hover { color: var(--text); }
+.box-actions .del:hover { color: var(--danger); }
+.box-actions .eye.active, .box-actions .lock.active { color: var(--accent); }
+/* compact view: inline actions are hidden, a floating bar is rendered outside the panel */
+aside.left.left-mini .box-item .box-actions { display: none; }
+.box-actions.float {
+  position: fixed; z-index: 150;
+  width: auto; overflow: visible; opacity: 1; pointer-events: auto;
+  transition: none;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 1px 2px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+}
+/* invisible hover bridge from the row edge to the bar, so the bar is
+   reachable even when the pointer crosses the gap slowly */
+.box-actions.float::before {
+  content: "";
+  position: absolute;
+  top: -4px; bottom: -4px; right: 100%;
+  width: 24px;
+}
 #boxListEmpty { font-size: 12px; color: var(--muted); padding: 4px 2px; }
 #canvasWrap {
   flex: 1; min-width: 0; position: relative;
@@ -129,13 +184,19 @@ aside.right {
   position: relative;
 }
 .right-tab {
-  position: absolute; left: -21px; top: 50%; transform: translateY(-50%);
+  position: absolute; left: -21px; top: 75px; transform: translateY(-50%);
   z-index: 2;
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 28px; padding: 0;
+  width: 20px; height: 50px; padding: 0;
   background: var(--panel); border: 1px solid var(--border); border-right: none;
   border-radius: 6px 0 0 6px;
   color: var(--muted); font-size: 10px; line-height: 1;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0s linear 1s, pointer-events 0s linear 1s;
+}
+aside.right:hover .right-tab {
+  opacity: 1; pointer-events: auto;
+  transition: none;
 }
 aside.right-collapsed {
   width: 34px; min-width: 34px;
@@ -150,6 +211,7 @@ aside.right-collapsed .right-tab {
   width: 28px;
   border-radius: 6px;
   border-right: 1px solid var(--border);
+  opacity: 1; pointer-events: auto;
 }
 aside.right-collapsed .right-tab:hover {
   border-color: var(--accent);
