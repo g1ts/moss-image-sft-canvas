@@ -3,12 +3,24 @@
 A visual bounding-box layout editor for [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) **Layout-to-image generation**.
 Draw and adjust bounding boxes on a canvas, describe the scene and each element, and get the exact JSON layout that
 [MOSS-Image-SFT](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT) expects as a prompt — no hand-written coordinates.
+A document can hold multiple **scenes** — each with its own canvas, boxes and prompts — and travels as a single
+project file.
 
 Optionally, generate the image right inside the app through a
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (`sdcpp`) server: the app sends the layout JSON
 as the prompt, tracks the job, and collects the results in a gallery.
 
 ![App overview: canvas with bounding boxes, box list, prompt and JSON panel](docs/screenshots/app-main.png)
+
+## Features
+
+- Multi-scene documents — each scene has its own canvas, boxes, prompt fields and background
+- Project file: export all scenes to one `.json`; import a project, a scene array or a single layout
+- Grid snap and alignment guides (magnet to box and canvas edges/centers)
+- Hide/lock boxes, duplication (`Ctrl+D`), z-order, box captions on the canvas
+- Per-scene undo/redo (`Ctrl+Z`), meta token picker, negative prompt
+- Live layout JSON: copy, paste, download
+- In-app generation via `sdcpp`: live preview frames, gallery with per-image parameters, auto-background
 
 ## Quick start
 
@@ -35,20 +47,25 @@ generation hosting below.
 
 ## How to use
 
-1. **Canvas** — set the size with the gear button on the canvas corner. All coordinates are in pixels from the
-   canvas center: on a `W×H` canvas each axis runs from `-W/2 … +W/2` (x → right, y → down).
-2. **Boxes** — drag with the mouse over the canvas to draw a box. Double-click a box (or click an item in the left
-   list) to edit its label, caption, text, color and exact coordinates. Delete with the `Delete` key or the ✕ button;
-   drag list items to change the z-order.
-3. **Scene** — fill in `meta` (e.g. `poster`), `canvas` (e.g. `single`) and the `caption` describing the whole scene
-   and its style.
-4. **JSON** — the layout JSON updates live in the right panel. Copy it, download it, or paste an existing layout back
-   into the app to edit it visually.
+1. **Scenes** — a document is a set of scenes, each with its own canvas, boxes and prompts. The header picker
+   switches scenes and adds, renames, duplicates or deletes them; it also exports all scenes to a `.json` project
+   file and imports one (a single layout becomes one scene).
+2. **Canvas** — set the size with the gear button on the canvas corner. Coordinates are pixels from the canvas
+   center: on a `W×H` canvas each axis runs from `-W/2 … +W/2` (x → right, y → down). The `Snap` and `Align` toggles
+   (header or canvas settings) snap boxes to the grid and to box/canvas lines, with guide lines.
+3. **Boxes** — drag over the canvas to draw a box. Double-click a box (or its list row) to edit its label, caption,
+   text, color and exact coordinates. Hide (eye) or lock boxes, duplicate with `Ctrl+D`, delete with `Delete`, drag
+   list rows to change the z-order.
+4. **Prompt** — fill in `meta` tokens (the gear button opens the value picker), `canvas` (e.g. `single`), a
+   `caption` describing the whole scene, and optionally a negative prompt.
+5. **JSON** — the `JSON` switch in the header shows the box list and the live layout JSON in the right panel: copy
+   it, download it, or paste an existing layout back into the app. Undo/redo: `Ctrl+Z` / `Ctrl+Shift+Z`.
 
 ## Layout JSON format
 
 The app exports/imports the layout format described in the
-[MOSS-Image docs](https://github.com/OpenMOSS/MOSS-Image#layout-generation):
+[MOSS-Image docs](https://github.com/OpenMOSS/MOSS-Image#layout-generation): `summary` holds the scene's meta,
+canvas type and caption; `items` — its elements.
 
 ```json
 {
@@ -75,21 +92,17 @@ The app exports/imports the layout format described in the
 }
 ```
 
-- `summary.caption` — the overall scene and style; `items` — individual elements.
-- Each item has a `label`, a `caption`, an optional `text` (rendered words), and a `bbox`.
+- Each item has a `label`, a `caption`, an optional `text` (the rendered words) and a `bbox`.
 - `bbox_format: "yxyx"` — boxes are `[y_min, x_min, y_max, x_max]`.
-- `bbox_coord_space: "abs_centralized"` — pixel coordinates relative to the canvas center; on a 1024×1024 canvas each
-  axis runs from −512 to +512.
-
-Keep the coordinates consistent with the requested output dimensions: generate the image at the same width/height as
-the canvas used to draw the layout.
+- `bbox_coord_space: "abs_centralized"` — pixels relative to the canvas center (−512…+512 on a 1024×1024 canvas).
+- Hidden boxes are excluded from the export (project files keep them with a `hidden: true` flag).
 
 ## Generating images with stable-diffusion.cpp
 
 The app talks to a [`stable-diffusion.cpp`](https://github.com/leejet/stable-diffusion.cpp) server over its HTTP API
 (`POST /sdcpp/v1/img_gen`, job polling, `/sdapi/v1/*` for samplers/schedulers/LoRAs). The layout JSON is sent as the
-prompt, so the same JSON works in the [MOSS-Image Gradio demo](https://huggingface.co/spaces/OpenMOSS-Team/MOSS-Image)
-or any other MOSS-Image frontend.
+prompt — the same JSON works in the [MOSS-Image Gradio demo](https://huggingface.co/spaces/OpenMOSS-Team/MOSS-Image)
+or any other MOSS-Image frontend; the negative prompt field is sent as `negative_prompt`.
 
 ### 1. Install the server
 
@@ -139,8 +152,9 @@ host/port (use the LAN IP when the app runs in another browser on the same netwo
 2. Recommended settings for MOSS-Image: **50 steps**, size **from canvas** (or explicit W/H equal to the canvas).
    CFG 3.0 is the model default; raise it to ~5 for stricter box adherence. LoRAs can be added in *Settings → Advanced*.
 3. Press **Generate** (or `Ctrl+Enter`). While the job runs, a **Cancel** button appears.
-4. Results land in the gallery below the canvas; "use as background" drops the last image under the boxes so you can
-   fine-tune the layout against the generated picture.
+4. Results land in the gallery below the canvas; the auto-background switch drops the last image under the boxes so
+   you can fine-tune the layout against it. A preview mode in *Settings → Advanced* shows intermediate frames on the
+   canvas while the job runs; click a gallery image for a preview with the generation parameters.
 
 > **Hosting note.** Browsers block mixed content, so the image generation from the HTTPS GitHub Pages build cannot
 > reach a plain-HTTP server. For generation, run the app locally (`npm run dev`) or serve the production build from
