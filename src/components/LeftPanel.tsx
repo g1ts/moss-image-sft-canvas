@@ -1,12 +1,14 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { LEFT_MAX, LEFT_MIN, LEFT_MINI, useStore } from "../store";
+import { MOBILE_QUERY, useMediaQuery } from "../lib/useMediaQuery";
 import BoxList from "./BoxList";
 
-export default function LeftPanel() {
+export default function LeftPanel({ open = false }: { open?: boolean }) {
   const leftWidth = useStore(s => s.leftWidth);
   const setLeftWidth = useStore(s => s.setLeftWidth);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
-  const mini = leftWidth < LEFT_MINI;
+  const mobile = useMediaQuery(MOBILE_QUERY);
+  const mini = !mobile && leftWidth < LEFT_MINI;
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -33,8 +35,8 @@ export default function LeftPanel() {
 
   return (
     <aside
-      className={"left" + (mini ? " left-mini" : "")}
-      style={{ width: leftWidth }}
+      className={"left" + (mini ? " left-mini" : "") + (open ? " mobile-open" : "")}
+      style={mobile ? undefined : { width: leftWidth }}
     >
       <BoxList />
       <div

@@ -239,6 +239,17 @@ export default function ScenePicker() {
             <span className="scene-row-name">+ New scene</span>
           </div>
           {importError && <div className="scene-menu-error">{importError}</div>}
+          <div className="scene-menu-sep" />
+          <div className="scene-row" role="menuitem" onClick={downloadProject}>
+            <span className="scene-row-name">Export project</span>
+          </div>
+          <div
+            className="scene-row"
+            role="menuitem"
+            onClick={() => fileRef.current?.click()}
+          >
+            <span className="scene-row-name">Import project</span>
+          </div>
         </div>
       )}
     </div>

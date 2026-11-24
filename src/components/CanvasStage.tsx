@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useStore, activeScene, blurActiveField } from "../store";
 import GearIcon from "./GearIcon";
 import {
@@ -29,6 +29,10 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   const renderScaleRef = useRef(1);
   const dragRef = useRef<Drag | null>(null);
   const guidesRef = useRef<AlignGuide[] | null>(null);
+  // last pointer kind that pressed on the canvas: touch gets bigger handles and hit zones
+  const lastPointerTypeRef = useRef<"mouse" | "touch" | "pen">("mouse");
+  const downInfoRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const lastTapRef = useRef<{ boxId: number; time: number } | null>(null);
 
   const scene = useStore(activeScene);
   const boxes = scene.boxes;
@@ -73,7 +77,8 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
     if (drag && drag.mode === "draw") drawBox(ctx, drag.box, true, true, H, false, st.showCaptions);
     drawGuides(ctx, W, H, guidesRef.current);
     const sel = sc.boxes.find(b => b.id === st.selectedId);
-    if (sel && !sel.hidden && !sel.locked) drawHandles(ctx, cv, sel);
+    if (sel && !sel.hidden && !sel.locked)
+      drawHandles(ctx, cv, sel, lastPointerTypeRef.current === "touch" ? 14 : 8);
   }, []);
 
   const applyAlign = useCallback((box: Box) => {
@@ -167,10 +172,10 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   }, []);
 
   const hitHandle = useCallback(
-    (box: Box, clientX: number, clientY: number): string | null => {
+    (box: Box, clientX: number, clientY: number, radius: number): string | null => {
       for (const [name, hx, hy] of handlePoints(box)) {
         const s = toScreen(hx, hy);
-        if (Math.abs(clientX - s.x) <= 7 && Math.abs(clientY - s.y) <= 7) return name;
+        if (Math.abs(clientX - s.x) <= radius && Math.abs(clientY - s.y) <= radius) return name;
       }
       return null;
     },
@@ -201,7 +206,7 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       }
       const sel = sc.boxes.find(b => b.id === st.selectedId);
       if (sel && !sel.hidden && !sel.locked) {
-        const h = hitHandle(sel, clientX, clientY);
+        const h = hitHandle(sel, clientX, clientY, 7);
         if (h) {
           cv.style.cursor =
             (h === "n" || h === "s") ? "ns-resize" :
@@ -240,13 +245,14 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
   }, [draw, boxes, selectedId, hoveredId, bgImage, genBusy, genPreviewFrame, jsonMode, showGrid, showCaptions, gridSize]);
 
   useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
       const st = useStore.getState();
       const p = toLogical(e.clientX, e.clientY);
       st.setCursor(Math.round(p.x), Math.round(p.y));
       const drag = dragRef.current;
       if (!drag) {
-        if (e.target === canvasRef.current) updateCursor(e.clientX, e.clientY);
+        if (e.pointerType === "mouse" && e.target === canvasRef.current)
+          updateCursor(e.clientX, e.clientY);
         return;
       }
       if (drag.mode === "draw") {
@@ -286,10 +292,10 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       }
     };
 
-    const onMouseUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
       const drag = dragRef.current;
-      if (!drag) return;
-      const st = useStore.getState();
+      if (drag) {
+        const st = useStore.getState();
         if (drag.mode === "draw") {
           const b = drag.box;
           commitBox(b);
@@ -308,7 +314,49 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
         guidesRef.current = null;
         st.setAction("");
         draw();
-      };
+      }
+      const down = downInfoRef.current;
+      downInfoRef.current = null;
+      if (e.pointerType !== "touch" || !down || !drag) return;
+      // a tap: short press without meaningful movement
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10 || performance.now() - down.time > 300)
+        return;
+      if (drag.mode !== "move") {
+        // a tap outside a box (or on a handle) breaks the double-tap chain
+        lastTapRef.current = null;
+        return;
+      }
+      const id = drag.box.id;
+      const now = performance.now();
+      const last = lastTapRef.current;
+      if (last && last.boxId === id && now - last.time < 400) {
+        // double tap on the same box = open its editor (the touch twin of dblclick)
+        lastTapRef.current = null;
+        useStore.getState().openBoxEditor(id);
+      } else {
+        lastTapRef.current = { boxId: id, time: now };
+      }
+    };
+
+    const onPointerCancel = () => {
+      downInfoRef.current = null;
+      const drag = dragRef.current;
+      if (!drag) return;
+      const st = useStore.getState();
+      if (drag.mode !== "draw") {
+        const o = drag.orig, b = drag.box;
+        b.xmin = o.xmin;
+        b.xmax = o.xmax;
+        b.ymin = o.ymin;
+        b.ymax = o.ymax;
+        st.touchBoxes();
+      }
+      st.cancelChange();
+      dragRef.current = null;
+      guidesRef.current = null;
+      st.setAction("");
+      draw();
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = document.activeElement ? document.activeElement.tagName : "";
@@ -347,28 +395,34 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       }
     };
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [draw, toLogical, updateCursor, applyAlign, applyAlignEdge]);
 
-  const onMouseDown = (e: ReactMouseEvent<HTMLCanvasElement>) => {
+  const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     blurActiveField();
     const st = useStore.getState();
     if (!st.jsonMode) return;
+    lastPointerTypeRef.current = e.pointerType;
+    downInfoRef.current = { x: e.clientX, y: e.clientY, time: performance.now() };
     const p = toLogical(e.clientX, e.clientY);
     setHoveredId(null);
     const sc = activeScene(st);
     const sel = sc.boxes.find(b => b.id === st.selectedId);
+    const radius = e.pointerType === "touch" ? 16 : 7;
     if (sel && !sel.hidden && !sel.locked) {
-      const h = hitHandle(sel, e.clientX, e.clientY);
+      const h = hitHandle(sel, e.clientX, e.clientY, radius);
       if (h) {
         st.beginChange();
         dragRef.current = { mode: "resize", handle: h, start: p, orig: { ...sel }, box: sel };
@@ -400,9 +454,11 @@ export default function CanvasStage({ onOpenSettings }: { onOpenSettings: () => 
       <canvas
         id="cv"
         ref={canvasRef}
-        onMouseDown={onMouseDown}
+        onPointerDown={onPointerDown}
         onDoubleClick={onDoubleClick}
-        onMouseLeave={() => setHoveredId(null)}
+        onPointerLeave={e => {
+          if (e.pointerType === "mouse") setHoveredId(null);
+        }}
       />
       <button
         className="gear-btn canvas-gear"
@@ -546,11 +602,11 @@ function clipToWidth(ctx: CanvasRenderingContext2D, text: string, maxW: number):
   return t;
 }
 
-function drawHandles(ctx: CanvasRenderingContext2D, cv: HTMLCanvasElement, b: Box) {
+function drawHandles(ctx: CanvasRenderingContext2D, cv: HTMLCanvasElement, b: Box, px: number) {
   const r = cv.getBoundingClientRect();
   const sc = activeScene(useStore.getState());
   const scale = r.width / sc.width;
-  const s = Math.max(6, 8 / scale);
+  const s = Math.max(6, px / scale);
   ctx.lineWidth = 1.5;
   for (const [, hx, hy] of handlePoints(b)) {
     ctx.fillStyle = "#ffffff";

@@ -1,16 +1,20 @@
 import { useStore } from "../store";
 import { useLayoutJson } from "../lib/useLayoutJson";
+import { MOBILE_QUERY, useMediaQuery } from "../lib/useMediaQuery";
 import SummarySection from "./SummarySection";
 import JsonPanel from "./JsonPanel";
 
-export default function RightPanel() {
+export default function RightPanel({ open = false }: { open?: boolean }) {
   const hidden = useStore(s => s.rightHidden);
   const setHidden = useStore(s => s.setRightHidden);
   const jsonMode = useStore(s => s.jsonMode);
   const layout = useLayoutJson();
   const { copied, copyJson, pasteJson, download } = layout;
+  const mobile = useMediaQuery(MOBILE_QUERY);
 
-  if (hidden) {
+  // the collapsed strip is a desktop concept (hover-revealed tab); on mobile the
+  // panel is a drawer, so a saved "hidden" state does not apply
+  if (hidden && !mobile) {
     return (
       <aside className="right right-collapsed">
         <button
@@ -74,7 +78,7 @@ export default function RightPanel() {
   }
 
   return (
-    <aside className="right">
+    <aside className={"right" + (open ? " mobile-open" : "")}>
       <button
         className="right-tab"
         title="hide panel"

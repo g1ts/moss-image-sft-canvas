@@ -12,14 +12,16 @@ import CanvasSettingsModal from "./components/CanvasSettingsModal";
 import BoxModal from "./components/BoxModal";
 import ImagePreviewModal from "./components/ImagePreviewModal";
 import GearIcon from "./components/GearIcon";
-import { useStore } from "./store";
+import { useStore, activeScene } from "./store";
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false);
   const [previewItemId, setPreviewItemId] = useState<number | null>(null);
+  const [mobilePanel, setMobilePanel] = useState<"none" | "boxes" | "prompt">("none");
   const pendingBoxId = useStore(s => s.pendingBoxId);
   const setPendingBoxId = useStore(s => s.setPendingBoxId);
+  const scene = useStore(activeScene);
   const genBusy = useStore(s => s.genBusy);
   const genStatus = useStore(s => s.genStatus);
   const jsonMode = useStore(s => s.jsonMode);
@@ -87,6 +89,24 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // the boxes panel only exists in JSON mode
+  useEffect(() => {
+    if (!jsonMode && mobilePanel === "boxes") setMobilePanel("none");
+  }, [jsonMode, mobilePanel]);
+
+  // Escape closes a mobile drawer (but never under an open modal)
+  useEffect(() => {
+    if (mobilePanel === "none") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (settingsOpen || canvasSettingsOpen || previewItemId !== null) return;
+      if (useStore.getState().pendingBoxId !== null) return;
+      setMobilePanel("none");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobilePanel, settingsOpen, canvasSettingsOpen, previewItemId]);
 
   // Clear the box selection when the cursor moves to a text field or clicks outside
   // the canvas, so hotkeys never silently "go into the field" while a box is selected
@@ -181,37 +201,92 @@ export default function App() {
               </button>
             </div>
             <div className="header-grid">
-              <span className="switch-label">Snap</span>
-              <label className="switch" title="Snap boxes to the grid while dragging">
-                <input
-                  type="checkbox"
-                  aria-label="Snap to grid"
-                  checked={snapToGrid}
-                  onChange={e => setSnapToGrid(e.target.checked)}
-                />
-                <span className="switch-track" aria-hidden="true" />
-              </label>
-              <span className="switch-label">Align</span>
-              <label className="switch" title="Snap to box and canvas lines, with guide lines">
-                <input
-                  type="checkbox"
-                  aria-label="Alignment guides and magnet"
-                  checked={alignEnabled}
-                  onChange={e => setAlignEnabled(e.target.checked)}
-                />
-                <span className="switch-track" aria-hidden="true" />
-              </label>
-              <span className="switch-label">JSON</span>
-              <label className="switch" title="Toggle JSON mode">
-                <input
-                  type="checkbox"
-                  id="jsonModeToggle"
-                  aria-label="JSON mode"
-                  checked={jsonMode}
-                  onChange={e => setJsonMode(e.target.checked)}
-                />
-                <span className="switch-track" aria-hidden="true" />
-              </label>
+              <span className="switch-pair">
+                <span className="switch-label">Snap</span>
+                <span className="switch-icon" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M3 15h18" />
+                    <path d="M9 3v18" />
+                    <path d="M15 3v18" />
+                  </svg>
+                </span>
+                <label className="switch" title="Snap boxes to the grid while dragging">
+                  <input
+                    type="checkbox"
+                    aria-label="Snap to grid"
+                    checked={snapToGrid}
+                    onChange={e => setSnapToGrid(e.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                </label>
+              </span>
+              <span className="switch-pair">
+                <span className="switch-label">Align</span>
+                <span className="switch-icon" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M8 4v16" />
+                    <path d="M16 4v16" />
+                    <path d="M3 12h18" />
+                  </svg>
+                </span>
+                <label className="switch" title="Snap to box and canvas lines, with guide lines">
+                  <input
+                    type="checkbox"
+                    aria-label="Alignment guides and magnet"
+                    checked={alignEnabled}
+                    onChange={e => setAlignEnabled(e.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                </label>
+              </span>
+              <span className="switch-pair">
+                <span className="switch-label">JSON</span>
+                <span className="switch-icon" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1" />
+                    <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" />
+                  </svg>
+                </span>
+                <label className="switch" title="Toggle JSON mode">
+                  <input
+                    type="checkbox"
+                    id="jsonModeToggle"
+                    aria-label="JSON mode"
+                    checked={jsonMode}
+                    onChange={e => setJsonMode(e.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                </label>
+              </span>
             </div>
           </div>
           <span
@@ -249,15 +324,42 @@ export default function App() {
             <GearIcon />
           </button>
         </div>
+        <div className="mobile-nav">
+          {jsonMode && (
+            <button
+              className={mobilePanel === "boxes" ? "active" : ""}
+              aria-label="Boxes panel"
+              aria-expanded={mobilePanel === "boxes"}
+              onClick={() => setMobilePanel(p => (p === "boxes" ? "none" : "boxes"))}
+            >
+              Boxes ({scene.boxes.length})
+            </button>
+          )}
+          <button
+            className={mobilePanel === "prompt" ? "active" : ""}
+            aria-label="Prompt and JSON panel"
+            aria-expanded={mobilePanel === "prompt"}
+            onClick={() => setMobilePanel(p => (p === "prompt" ? "none" : "prompt"))}
+          >
+            Prompt / JSON
+          </button>
+        </div>
       </header>
       <main>
-        {jsonMode && <LeftPanel />}
+        {jsonMode && <LeftPanel open={mobilePanel === "boxes"} />}
         <div id="centerCol">
           <CanvasStage onOpenSettings={() => setCanvasSettingsOpen(true)} />
           <Gallery onPreview={setPreviewItemId} />
         </div>
-        <RightPanel />
+        <RightPanel open={mobilePanel === "prompt"} />
       </main>
+      {mobilePanel !== "none" && (
+        <div
+          className="mobile-backdrop"
+          aria-hidden="true"
+          onClick={() => setMobilePanel("none")}
+        />
+      )}
       <StatusBar />
       <Toast />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />

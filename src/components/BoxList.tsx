@@ -181,7 +181,7 @@ export default function BoxList() {
       >
         {boxes.length === 0 ? (
           <div id="boxListEmpty">
-            Empty for now — drag with the mouse over the canvas to draw a box
+            Empty for now — drag over the canvas to draw a box
           </div>
         ) : (
           boxes.map((b, i) => (
@@ -212,6 +212,10 @@ export default function BoxList() {
               onHover={h => setHoveredId(h ? b.id : null)}
               onShowActions={(bx, el) => showActions(bx.id, el)}
               onHideActions={scheduleHide}
+              onMoveUp={() => moveBox(b.id, i - 1)}
+              onMoveDown={() => moveBox(b.id, i + 2)}
+              canMoveUp={i > 0}
+              canMoveDown={i < boxes.length - 1}
               onDragOver={e => {
                 if (dragId === null || dragId === b.id) return;
                 e.preventDefault();
@@ -271,7 +275,11 @@ function BoxItem({
   onDrop,
   onHover,
   onShowActions,
-  onHideActions
+  onHideActions,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown
 }: {
   box: Box;
   selected: boolean;
@@ -291,6 +299,10 @@ function BoxItem({
   onHover: (hovering: boolean) => void;
   onShowActions: (box: Box, el: HTMLElement) => void;
   onHideActions: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const cls =
     "box-item" +
@@ -341,6 +353,20 @@ function BoxItem({
           onDelete={onDelete}
         />
       </div>
+      <div className="box-actions-row">
+        <BoxActions
+          box={box}
+          onToggleHidden={onToggleHidden}
+          onToggleLocked={onToggleLocked}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+          onEdit={onEdit}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+        />
+      </div>
     </div>
   );
 }
@@ -350,16 +376,52 @@ function BoxActions({
   onToggleHidden,
   onToggleLocked,
   onDuplicate,
-  onDelete
+  onDelete,
+  onEdit,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown
 }: {
   box: Box;
   onToggleHidden: () => void;
   onToggleLocked: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }) {
   return (
     <>
+      {onEdit && (
+        <button
+          className="edit"
+          title="Edit box"
+          aria-label="Edit box"
+          onClick={e => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          onDoubleClick={e => e.stopPropagation()}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+          </svg>
+        </button>
+      )}
       <button
         className={"eye" + (box.hidden ? " active" : "")}
         title={box.hidden ? "Show box" : "Hide box"}
@@ -420,6 +482,60 @@ function BoxActions({
       >
         ✕
       </button>
+      {onMoveUp && onMoveDown && (
+        <span className="move-bar">
+          <button
+            className="up"
+            title="Move box up"
+            aria-label="Move box up"
+            disabled={!canMoveUp}
+            onClick={e => {
+              e.stopPropagation();
+              onMoveUp();
+            }}
+            onDoubleClick={e => e.stopPropagation()}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+          <button
+            className="down"
+            title="Move box down"
+            aria-label="Move box down"
+            disabled={!canMoveDown}
+            onClick={e => {
+              e.stopPropagation();
+              onMoveDown();
+            }}
+            onDoubleClick={e => e.stopPropagation()}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </span>
+      )}
     </>
   );
 }

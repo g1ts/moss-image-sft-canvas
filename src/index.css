@@ -174,7 +174,14 @@ aside.left.left-mini .box-item .box-actions { display: none; }
   background: #0d0f12;
   overflow: hidden;
 }
-canvas { box-shadow: 0 0 0 1px var(--border); cursor: crosshair; user-select: none; }
+canvas {
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
 aside.right {
   width: 340px; min-width: 340px;
   background: var(--panel);
@@ -553,6 +560,14 @@ label.chk input[type=checkbox] { accent-color: var(--accent); margin: 0; cursor:
 .switch:active input:checked + .switch-track::after { transform: translateX(16px) scale(1.08); }
 .switch input:focus-visible + .switch-track { box-shadow: 0 0 0 2px rgba(77, 163, 255, .4); }
 .switch-label { font-size: 12px; color: var(--muted); }
+.switch-pair { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.switch-icon {
+  display: none;
+  align-items: center;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.switch-pair:has(.switch input:checked) .switch-icon { color: var(--accent); }
 .canvas-gear { position: absolute; top: 10px; right: 10px; z-index: 5; }
 .modal.wide { width: 640px; }
 .cs-section { padding: 12px; border-bottom: 1px solid var(--border); }
@@ -751,4 +766,189 @@ input[type=text].meta-picker-filter {
   .pv-body { flex-direction: column; }
   .pv-params { flex: 0 0 auto; }
   .pv-img-wrap img { max-height: 46vh; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Mobile: drawer panels, touch controls, compact header               */
+/* ------------------------------------------------------------------ */
+body { -webkit-tap-highlight-color: transparent; }
+button, a, label { touch-action: manipulation; }
+.mobile-nav { display: none; }
+.box-actions-row { display: none; }
+
+@media (max-width: 900px) {
+  header {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 8px;
+    padding: 8px 10px;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    min-width: 0;
+    row-gap: 8px;
+    gap: 8px;
+  }
+  .header-tools {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .header-grid { padding-left: 8px; }
+  .switch-label { display: none; }
+  .switch-icon { display: inline-flex; }
+  #genStatus { max-width: 45vw; }
+  .scene-btn { max-width: 150px; }
+  .scene-picker .gear-btn { display: none; }
+
+  .mobile-nav {
+    display: flex;
+    gap: 8px;
+    flex-basis: 100%;
+  }
+  .mobile-nav button {
+    flex: 1;
+    height: 34px;
+    font-size: 13px;
+  }
+  .mobile-nav button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, .5);
+  }
+  aside.left,
+  aside.right {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 45;
+    width: min(100vw, 360px);
+    transform: translateX(-105%);
+    transition: transform .2s ease;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, .45);
+  }
+  aside.left { left: 0; }
+  aside.right {
+    right: 0;
+    min-width: 0;
+    transform: translateX(105%);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, .45);
+  }
+  aside.left.mobile-open,
+  aside.right.mobile-open { transform: none; }
+  .left-resizer,
+  .right-tab { display: none; }
+
+  .canvas-gear { width: 40px; height: 40px; }
+
+  #statusBar {
+    flex-wrap: nowrap;
+    gap: 4px 10px;
+    padding: 5px 10px;
+  }
+  #stCoords,
+  #stSize { flex-shrink: 0; }
+  #stAction {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .g-item { width: 120px; }
+  .g-item img { height: 90px; }
+  .g-item .g-del,
+  .g-item .g-dl {
+    width: 26px; height: 26px;
+    right: 3px;
+    line-height: 26px;
+    padding: 0;
+    font-size: 13px;
+  }
+  .g-item .g-del { top: 3px; }
+  .g-item .g-dl { top: 32px; }
+  .g-item .g-view { width: 26px; height: 26px; right: 3px; top: 61px; }
+  .gallery-tab { width: 30px; height: 24px; }
+}
+
+/* touch-primary devices: actions are always visible, no hover overlays */
+@media (hover: none) {
+  aside.left { min-width: 210px !important; }
+  .box-item { flex-wrap: wrap; row-gap: 2px; }
+  .box-item .box-actions { display: none; }
+  .box-actions.float { display: none !important; }
+  .box-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    padding-left: 38px;
+  }
+  .box-actions-row button {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--muted);
+    padding: 0;
+    font-size: 13px;
+  }
+  .box-actions-row button:active { background: var(--panel2); color: var(--text); }
+  .box-actions-row button:disabled { opacity: .35; }
+  .box-actions-row .eye.active,
+  .box-actions-row .lock.active { color: var(--accent); }
+  .box-actions-row .del:active { color: var(--danger); }
+  .box-actions-row .move-bar {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  .scene-row-actions { opacity: 1; pointer-events: auto; }
+  .scene-row-btn { width: 28px; height: 28px; }
+}
+
+/* 16px fonts stop iOS from zooming into focused fields */
+@media (max-width: 700px) {
+  input[type=text],
+  input[type=number],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* small phones: modals become bottom sheets */
+@media (max-width: 600px) {
+  .modal-backdrop { align-items: flex-end; }
+  .modal,
+  .modal.wide,
+  .modal.img-view {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 12px 12px 0 0;
+    max-height: 92vh;
+    max-height: 92dvh;
+  }
+  .bm-coords { grid-template-columns: repeat(2, 1fr); }
+  .meta-picker { height: min(260px, 55vh); }
+  .meta-picker-part.grow .meta-picker-list { columns: 1; }
+}
+
+@media (max-width: 480px) {
+  header h1 { display: none; }
+  #stGithub { display: none; }
 }
